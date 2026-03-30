@@ -1,4 +1,5 @@
 <Solution>
   <Project Path="Metaphysics.Core/Metaphysics.Core.csproj" />
   <Project Path="Metaphysics.Lab/Metaphysics.Lab.csproj" />
+  <Project Path="Metaphysics.UnitTests/Metaphysics.UnitTests.csproj" />
 </Solution>
