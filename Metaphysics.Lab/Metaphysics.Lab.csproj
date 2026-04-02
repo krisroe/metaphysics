@@ -2,6 +2,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Metaphysics.Core\Metaphysics.Core.csproj" />
+    <ProjectReference Include="..\Metaphysics.BusinessLogic\Metaphysics.BusinessLogic.csproj" />
   </ItemGroup>
 
   <PropertyGroup>
