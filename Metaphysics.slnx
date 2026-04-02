@@ -2,4 +2,5 @@
   <Project Path="Metaphysics.Core/Metaphysics.Core.csproj" />
   <Project Path="Metaphysics.Lab/Metaphysics.Lab.csproj" />
   <Project Path="Metaphysics.UnitTests/Metaphysics.UnitTests.csproj" />
+  <Project Path="Metaphysics.BusinessLogic/Metaphysics.BusinessLogic.csproj" />
 </Solution>

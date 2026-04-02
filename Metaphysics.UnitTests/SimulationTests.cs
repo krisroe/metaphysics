@@ -31,7 +31,7 @@ public class SimulationTests
     public void AddResource_AddsResourceToList()
     {
         using var simulation = new Simulation();
-        var resource = new SimulationResource(ResourceType.MetaphysicalEnergy, 100m);
+        var resource = new SimulationResource(ResourceType.MetaphysicalEnergy, 100m, false);
 
         simulation.AddResource(resource);
 
@@ -43,8 +43,8 @@ public class SimulationTests
     public void AddResource_SupportsMultipleResources()
     {
         using var simulation = new Simulation();
-        var resource1 = new SimulationResource(ResourceType.MetaphysicalEnergy, 50m);
-        var resource2 = new SimulationResource(ResourceType.MetaphysicalEnergy, 75m);
+        var resource1 = new SimulationResource(ResourceType.MetaphysicalEnergy, 50m, false);
+        var resource2 = new SimulationResource(ResourceType.MetaphysicalEnergy, 75m, false);
 
         simulation.AddResource(resource1);
         simulation.AddResource(resource2);
