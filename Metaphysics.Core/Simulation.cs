@@ -21,15 +21,32 @@ public class Simulation : IDisposable
         _resources.Add(resource);
     }
 
-    public void AddEntity(SimulationEntity entity)
+    public void AddEntity(SimulationEntity entity, Simulation originator)
     {
-        Parent?.OnChildEntityEvent(null, entity, this, 1);
-        _entities.Add(entity);
+        var ancestors = new List<Simulation>();
+        var current = Parent;
+        while (current != null)
+        {
+            ancestors.Add(current);
+            current = current.Parent;
+        }
+
+        bool cancelled = false;
+
+        // First pass: top-down (root to immediate parent)
+        for (int i = ancestors.Count - 1; i >= 0; i--)
+            ancestors[i].OnChildEntityEvent(null, entity, originator, i + 1, 1, ref cancelled);
+
+        // Second pass: bottom-up (immediate parent to root)
+        for (int i = 0; i < ancestors.Count; i++)
+            ancestors[i].OnChildEntityEvent(null, entity, originator, i + 1, 2, ref cancelled);
+
+        if (!cancelled)
+            _entities.Add(entity);
     }
 
-    protected virtual void OnChildEntityEvent(SimulationEntity? beforeEntity, SimulationEntity afterEntity, Simulation originator, int levelsUp)
+    protected virtual void OnChildEntityEvent(SimulationEntity? beforeEntity, SimulationEntity afterEntity, Simulation originator, int levelsUp, int passNumber, ref bool cancelled)
     {
-        Parent?.OnChildEntityEvent(beforeEntity, afterEntity, originator, levelsUp + 1);
     }
 
     public void Dispose()
