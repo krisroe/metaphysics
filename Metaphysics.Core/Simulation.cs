@@ -4,16 +4,22 @@ public class Simulation : IDisposable
 {
     private bool _disposed = false;
     private readonly List<SimulationResource> _resources = new();
+    private readonly List<SimulationResource> _usedUpResources = new();
     private readonly List<SimulationEntity> _entities = new();
     private readonly List<SimulationSet> _simulationSets = new();
+    private readonly Dictionary<Guid, SimulationEntity> _entitiesByIndividualId = new();
 
     public Simulation? Parent { get; }
+    public SimulationClass SimulationClass { get; }
     public IReadOnlyList<SimulationResource> Resources => _resources;
+    public IReadOnlyList<SimulationResource> UsedUpResources => _usedUpResources;
     public IReadOnlyList<SimulationEntity> Entities => _entities;
     public IReadOnlyList<SimulationSet> SimulationSets => _simulationSets;
+    public IReadOnlyDictionary<Guid, SimulationEntity> EntitiesByIndividualId => _entitiesByIndividualId;
 
-    public Simulation(Simulation? parent = null)
+    public Simulation(SimulationClass simulationClass, Simulation? parent = null)
     {
+        SimulationClass = simulationClass;
         Parent = parent;
         Console.WriteLine("Simulation beginning...");
     }
@@ -72,6 +78,32 @@ public class Simulation : IDisposable
         _resources.Add(resource);
     }
 
+    public void UseUpResource(SimulationResource resource)
+    {
+        decimal available = _resources.Where(r => r.ResourceType == resource.ResourceType).Sum(r => r.Quantity);
+        if (available < resource.Quantity)
+            throw new InvalidOperationException($"Insufficient {resource.ResourceType} resources. Required: {resource.Quantity}, Available: {available}.");
+
+        decimal remaining = resource.Quantity;
+        foreach (var r in _resources.Where(r => r.ResourceType == resource.ResourceType).ToList())
+        {
+            if (r.Quantity <= remaining)
+            {
+                _resources.Remove(r);
+                remaining -= r.Quantity;
+            }
+            else
+            {
+                _resources.Remove(r);
+                _resources.Add(new SimulationResource(r.ResourceType, r.Quantity - remaining, r.IsValueAdd));
+                remaining = 0;
+            }
+            if (remaining == 0) break;
+        }
+
+        _usedUpResources.Add(resource);
+    }
+
     private List<Simulation> GetAncestors()
     {
         var ancestors = new List<Simulation>();
@@ -84,7 +116,7 @@ public class Simulation : IDisposable
         return ancestors;
     }
 
-    public void AddEntity(SimulationEntity entity, Simulation originator)
+    public void AddOrChangeEntity(SimulationEntity? beforeEntity, SimulationEntity afterEntity, Simulation originator)
     {
         var ancestors = GetAncestors();
 
@@ -92,18 +124,33 @@ public class Simulation : IDisposable
 
         // First pass: top-down (root to immediate parent)
         for (int i = ancestors.Count - 1; i >= 0; i--)
-            ancestors[i].OnChildEntityEvent(null, entity, originator, i + 1, 1, ref cancelled);
+            ancestors[i].OnChildEntityEvent(beforeEntity, afterEntity, originator, i + 1, 1, ref cancelled);
 
         // Second pass: bottom-up (immediate parent to root)
         for (int i = 0; i < ancestors.Count; i++)
-            ancestors[i].OnChildEntityEvent(null, entity, originator, i + 1, 2, ref cancelled);
+            ancestors[i].OnChildEntityEvent(beforeEntity, afterEntity, originator, i + 1, 2, ref cancelled);
 
         if (!cancelled)
-            _entities.Add(entity);
+        {
+            if (beforeEntity != null
+                && beforeEntity.Status == SimulationEntityStatus.Deceased
+                && afterEntity.Status == SimulationEntityStatus.Alive)
+                throw new InvalidOperationException("Cannot change an entity from Deceased to Alive.");
+
+            if (beforeEntity != null)
+                _entities.Remove(beforeEntity);
+            _entities.Add(afterEntity);
+            if (afterEntity.IndividualId != Guid.Empty)
+                _entitiesByIndividualId[afterEntity.IndividualId] = afterEntity;
+        }
     }
 
     protected virtual void OnChildEntityEvent(SimulationEntity? beforeEntity, SimulationEntity afterEntity, Simulation originator, int levelsUp, int passNumber, ref bool cancelled)
     {
+        if (beforeEntity != null
+            && beforeEntity.Status == SimulationEntityStatus.Deceased
+            && afterEntity.Status == SimulationEntityStatus.Alive)
+            cancelled = true;
     }
 
     protected virtual void OnChildCreateSimulation(Simulation simulation, SimulationSet simulationSet, SimulationClass simulationClass, Simulation originator, int levelsUp, int passNumber)
