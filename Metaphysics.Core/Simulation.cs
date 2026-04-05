@@ -139,7 +139,26 @@ public class Simulation : IDisposable
 
             if (beforeEntity != null)
                 _entities.Remove(beforeEntity);
-            _entities.Add(afterEntity);
+
+            bool entityDied = beforeEntity != null
+                && beforeEntity.Status == SimulationEntityStatus.Alive
+                && afterEntity.Status == SimulationEntityStatus.Deceased;
+
+            if (entityDied)
+            {
+                foreach (var resource in afterEntity.Resources)
+                {
+                    if (resource.IsValueAdd)
+                        _resources.Add(resource);
+                    else
+                        _usedUpResources.Add(resource);
+                }
+            }
+            else
+            {
+                _entities.Add(afterEntity);
+            }
+
             if (afterEntity.IndividualId != Guid.Empty)
                 _entitiesByIndividualId[afterEntity.IndividualId] = afterEntity;
         }
