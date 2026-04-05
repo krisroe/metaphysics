@@ -153,4 +153,23 @@ public class SimulationTests
         Assert.ThrowsExactly<InvalidOperationException>(() =>
             simulation.AddOrChangeEntity(before, after, simulation));
     }
+
+    [TestMethod]
+    public void AddOrChangeEntity_OnDeath_RemovesEntityAndReallocatesResources()
+    {
+        using var simulation = new Simulation(SimulationClass.Base);
+        var alive = new SimulationEntity("Organism");
+        alive.Resources.Add(new SimulationResource(ResourceType.MetaphysicalEnergy, 5m, true));
+        alive.Resources.Add(new SimulationResource(ResourceType.MetaphysicalEnergy, 3m, false));
+        simulation.AddOrChangeEntity(null, alive, simulation);
+
+        var deceased = new SimulationEntity(alive) { Status = SimulationEntityStatus.Deceased };
+        simulation.AddOrChangeEntity(alive, deceased, simulation);
+
+        Assert.IsEmpty(simulation.Entities);
+        Assert.HasCount(1, simulation.Resources);
+        Assert.AreEqual(5m, simulation.Resources[0].Quantity);
+        Assert.HasCount(1, simulation.UsedUpResources);
+        Assert.AreEqual(3m, simulation.UsedUpResources[0].Quantity);
+    }
 }
