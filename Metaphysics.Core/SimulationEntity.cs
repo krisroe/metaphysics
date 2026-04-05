@@ -17,11 +17,21 @@ public class SimulationEntity
     }
 
     public string Name { get; }
+    public SimulationEntityStatus Status { get; set; } = SimulationEntityStatus.Alive;
     public List<SimulationResource> Resources { get; } = new();
 
     public SimulationEntity(string name)
     {
         Name = name;
+    }
+
+    public SimulationEntity(SimulationEntity source)
+    {
+        Name = source.Name;
+        Status = source.Status;
+        if (source._individualId != Guid.Empty)
+            _individualId = source._individualId;
+        Resources.AddRange(source.Resources.Select(r => new SimulationResource(r)));
     }
 
     public override string ToString() => Name;

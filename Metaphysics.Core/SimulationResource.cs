@@ -17,4 +17,11 @@ public class SimulationResource
         Quantity = quantity;
         IsValueAdd = isValueAdd;
     }
+
+    public SimulationResource(SimulationResource source)
+    {
+        ResourceType = source.ResourceType;
+        Quantity = source.Quantity;
+        IsValueAdd = source.IsValueAdd;
+    }
 }
