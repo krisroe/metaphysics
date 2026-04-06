@@ -21,7 +21,7 @@ if (storyType == SimulationStoryType.HelloWorld)
 }
 else if (storyType == SimulationStoryType.BaseSimulationMaturation)
 {
-    using (var simulation = SimulationFactory.CreateSimulation())
+    using (var simulation = SimulationFactory.RunBaseSimulationMaturation())
     {
     }
 }
