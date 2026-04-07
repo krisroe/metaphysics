@@ -116,7 +116,7 @@ public class Simulation : IDisposable
         return ancestors;
     }
 
-    public void AddOrChangeEntity(SimulationEntity? beforeEntity, SimulationEntity afterEntity, Simulation originator)
+    public void AddOrChangeEntities(Dictionary<SimulationEntity, SimulationEntity?> entityMapping, List<SimulationEntity> newEntities, Simulation originator)
     {
         var ancestors = GetAncestors();
 
@@ -124,52 +124,105 @@ public class Simulation : IDisposable
 
         // First pass: top-down (root to immediate parent)
         for (int i = ancestors.Count - 1; i >= 0; i--)
-            ancestors[i].OnChildEntityEvent(beforeEntity, afterEntity, originator, i + 1, 1, ref cancelled);
+            ancestors[i].OnChildEntityEvent(entityMapping, newEntities, originator, i + 1, 1, ref cancelled);
 
         // Second pass: bottom-up (immediate parent to root)
         for (int i = 0; i < ancestors.Count; i++)
-            ancestors[i].OnChildEntityEvent(beforeEntity, afterEntity, originator, i + 1, 2, ref cancelled);
+            ancestors[i].OnChildEntityEvent(entityMapping, newEntities, originator, i + 1, 2, ref cancelled);
 
         if (!cancelled)
         {
-            if (beforeEntity != null
-                && beforeEntity.Status == SimulationEntityStatus.Deceased
-                && afterEntity.Status == SimulationEntityStatus.Alive)
-                throw new InvalidOperationException("Cannot change an entity from Deceased to Alive.");
+            if (!ValidateAddOrChangeEntitiesEvent(entityMapping, newEntities))
+                throw new InvalidOperationException("AddOrChangeEntities validation failed.");
 
-            if (beforeEntity != null)
-                _entities.Remove(beforeEntity);
-
-            bool entityDied = beforeEntity != null
-                && beforeEntity.Status == SimulationEntityStatus.Alive
-                && afterEntity.Status == SimulationEntityStatus.Deceased;
-
-            if (entityDied)
+            foreach (var (before, after) in entityMapping)
             {
-                foreach (var resource in afterEntity.Resources)
+                _entities.Remove(before);
+
+                if (after == null)
+                    continue;
+
+                bool entityDied = before.Status == SimulationEntityStatus.Alive
+                    && after.Status == SimulationEntityStatus.Deceased;
+
+                if (entityDied)
                 {
-                    if (resource.IsValueAdd)
-                        _resources.Add(resource);
-                    else
-                        _usedUpResources.Add(resource);
+                    foreach (var resource in after.Resources)
+                    {
+                        if (resource.IsValueAdd)
+                            _resources.Add(resource);
+                        else
+                            _usedUpResources.Add(resource);
+                    }
                 }
-            }
-            else
-            {
-                _entities.Add(afterEntity);
+                else
+                {
+                    _entities.Add(after);
+                }
+
+                if (after.IndividualId != Guid.Empty)
+                    _entitiesByIndividualId[after.IndividualId] = after;
             }
 
-            if (afterEntity.IndividualId != Guid.Empty)
-                _entitiesByIndividualId[afterEntity.IndividualId] = afterEntity;
+            foreach (var newEntity in newEntities)
+            {
+                _entities.Add(newEntity);
+                if (newEntity.IndividualId != Guid.Empty)
+                    _entitiesByIndividualId[newEntity.IndividualId] = newEntity;
+            }
         }
     }
 
-    protected virtual void OnChildEntityEvent(SimulationEntity? beforeEntity, SimulationEntity afterEntity, Simulation originator, int levelsUp, int passNumber, ref bool cancelled)
+    protected virtual void OnChildEntityEvent(Dictionary<SimulationEntity, SimulationEntity?> entityMapping, List<SimulationEntity> newEntities, Simulation originator, int levelsUp, int passNumber, ref bool cancelled)
     {
-        if (beforeEntity != null
-            && beforeEntity.Status == SimulationEntityStatus.Deceased
-            && afterEntity.Status == SimulationEntityStatus.Alive)
+        if (!ValidateAddOrChangeEntitiesEvent(entityMapping, newEntities))
             cancelled = true;
+    }
+
+    protected bool ValidateAddOrChangeEntitiesEvent(Dictionary<SimulationEntity, SimulationEntity?> entityMapping, List<SimulationEntity> newEntities)
+    {
+        // Check for resurrection, duplicate entity references, and before-entity individual ID consistency
+        var allEntities = new HashSet<SimulationEntity>();
+        foreach (var (before, after) in entityMapping)
+        {
+            if (after != null
+                && before.Status == SimulationEntityStatus.Deceased
+                && after.Status == SimulationEntityStatus.Alive)
+                return false;
+            if (!allEntities.Add(before)) return false;
+            if (after != null && !allEntities.Add(after)) return false;
+            if (before.IndividualId != Guid.Empty
+                && (!_entitiesByIndividualId.TryGetValue(before.IndividualId, out var mapped) || !ReferenceEquals(mapped, before)))
+                return false;
+        }
+        foreach (var newEntity in newEntities)
+            if (!allEntities.Add(newEntity)) return false;
+
+        // Check resultant entities for duplicate individual IDs and verify any existing
+        // simulation individual IDs have their owner present as a mapping input
+        var resultantIds = new HashSet<Guid>();
+        foreach (var after in entityMapping.Values)
+        {
+            if (after != null && after.IndividualId != Guid.Empty)
+            {
+                if (!resultantIds.Add(after.IndividualId)) return false;
+                if (_entitiesByIndividualId.TryGetValue(after.IndividualId, out var existing)
+                    && !entityMapping.ContainsKey(existing))
+                    return false;
+            }
+        }
+        foreach (var newEntity in newEntities)
+        {
+            if (newEntity.IndividualId != Guid.Empty)
+            {
+                if (!resultantIds.Add(newEntity.IndividualId)) return false;
+                if (_entitiesByIndividualId.TryGetValue(newEntity.IndividualId, out var existing)
+                    && !entityMapping.ContainsKey(existing))
+                    return false;
+            }
+        }
+
+        return true;
     }
 
     protected virtual void OnChildCreateSimulation(Simulation simulation, SimulationSet simulationSet, SimulationClass simulationClass, Simulation originator, int levelsUp, int passNumber)

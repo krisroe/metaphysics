@@ -24,21 +24,21 @@ public static class SimulationFactory
         //2b. Life begins as metabolic chemoautotrophy capturing naturally occuring reactions into pathway such as the acetyl-CoA pathway
         Console.WriteLine("A group of living organisms comes into existence with chemoautotrophy.");
         SimulationEntity organisms = new SimulationEntity("Primitive prokaryotic unicellular organisms with chemoautotrophy");
-        simulation.AddOrChangeEntity(null, organisms, simulation);
+        simulation.AddOrChangeEntities(new Dictionary<SimulationEntity, SimulationEntity?>(), [organisms], simulation);
 
         Console.WriteLine("This group of living organisms has staying power.");
         var nextIteration = new SimulationEntity(organisms);
         nextIteration.Resources.Add(new SimulationResource(ResourceType.MetaphysicalEnergy, 1m, true));
-        simulation.AddOrChangeEntity(organisms, nextIteration, simulation);
+        simulation.AddOrChangeEntities(new Dictionary<SimulationEntity, SimulationEntity?> { { organisms, nextIteration } }, [], simulation);
 
         Console.WriteLine("More similar organisms come into existence.");
         organisms = new SimulationEntity("Primitive prokaryotic unicellular organisms with chemoautotrophy");
-        simulation.AddOrChangeEntity(null, organisms, simulation);
+        simulation.AddOrChangeEntities(new Dictionary<SimulationEntity, SimulationEntity?>(), [organisms], simulation);
 
         Console.WriteLine("The initial group of living organisms all die or divide, allowing their resources to be harvested by the simulation.");
         var deceasedFirstOrganisms = new SimulationEntity(nextIteration);
         deceasedFirstOrganisms.Status = SimulationEntityStatus.Deceased;
-        simulation.AddOrChangeEntity(nextIteration, deceasedFirstOrganisms, simulation);
+        simulation.AddOrChangeEntities(new Dictionary<SimulationEntity, SimulationEntity?> { { nextIteration, deceasedFirstOrganisms } }, [], simulation);
 
         return simulation;
     }
