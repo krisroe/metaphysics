@@ -17,6 +17,7 @@ public static class SimulationFactory
         simulation.AddResource(new SimulationResource(ResourceType.MetaphysicalEnergy, 1m, false));
 
         //Lots of stuff happens in the simulation, but the relevant milestone is the first life forms.
+        //Timeline for abiogeneis is 3.8 to 3.5 billion years ago, but possibly back to 4.1 billion years ago.
         //1. This is a simplification since there might be earlier groups of organisms that become extinct.
         //2. There are competing theories of abiogenesis, which is correct is not really relevant here.
         //2a. Heterotrophs first (using organic molecules in the environment as a resource), chemoautotrophy develops later
@@ -34,7 +35,7 @@ public static class SimulationFactory
         organisms = new SimulationEntity("Primitive prokaryotic unicellular organisms with chemoautotrophy");
         simulation.AddOrChangeEntity(null, organisms, simulation);
 
-        Console.WriteLine("The initial group of living organisms all die, allowing their resources to be harvested by the simulation.");
+        Console.WriteLine("The initial group of living organisms all die or divide, allowing their resources to be harvested by the simulation.");
         var deceasedFirstOrganisms = new SimulationEntity(nextIteration);
         deceasedFirstOrganisms.Status = SimulationEntityStatus.Deceased;
         simulation.AddOrChangeEntity(nextIteration, deceasedFirstOrganisms, simulation);
