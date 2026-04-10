@@ -19,6 +19,8 @@ public class SimulationEntity
     public string Name { get; }
     public SimulationEntityStatus Status { get; set; } = SimulationEntityStatus.Alive;
     public List<SimulationResource> Resources { get; } = new();
+    public bool IsAgent { get; set; } = false;
+    public bool IsObserver { get; set; } = false;
 
     public SimulationEntity(string name)
     {
@@ -31,7 +33,9 @@ public class SimulationEntity
         Status = source.Status;
         if (source._individualId != Guid.Empty)
             _individualId = source._individualId;
-        Resources.AddRange(source.Resources.Select(r => new SimulationResource(r)));
+        Resources.AddRange(source.Resources.Select(r => r with { }));
+        IsAgent = source.IsAgent;
+        IsObserver = source.IsObserver;
     }
 
     public override string ToString() => Name;
