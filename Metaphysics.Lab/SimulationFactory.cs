@@ -16,6 +16,20 @@ public static class SimulationFactory
         Console.WriteLine("Understanding the simulation maturation process adds a unit of energy to the simulation.");
         simulation.AddResource(new SimulationResource(ResourceType.MetaphysicalEnergy, 1m, false));
 
+        Dictionary<SimulationEntity, SimulationEntity?> mapping;
+        List<SimulationEntity> newEntities;
+        SimulationEntity entity;
+
+        //add a general observer
+        mapping = new Dictionary<SimulationEntity, SimulationEntity?>();
+        entity = new SimulationEntity("General Observer")
+        {
+            IsObserver = true,
+        };
+        entity.Resources.Add(new SimulationResource(ResourceType.MetaphysicalEnergy, 1, false));
+        newEntities = new List<SimulationEntity>() { entity };
+        simulation.AddOrChangeEntities(mapping, newEntities, simulation);
+
         //Lots of stuff happens in the simulation, but the relevant milestone is the first life forms.
         //Timeline for abiogeneis is 3.8 to 3.5 billion years ago, but possibly back to 4.1 billion years ago.
         //1. This is a simplification since there might be earlier groups of organisms that become extinct.
