@@ -194,6 +194,16 @@ public class Simulation : IDisposable
 
                 if (after.IndividualId != Guid.Empty)
                     _entitiesByIndividualId[after.IndividualId] = after;
+
+                // If the entity has an ancestor that is not itself being remapped,
+                // update the ancestor's progeny list to point to the new version.
+                var ancestor = before.Ancestor;
+                if (ancestor != null && !entityMapping.ContainsKey(ancestor))
+                {
+                    int progenyIndex = ancestor.Progeny.IndexOf(before);
+                    if (progenyIndex >= 0)
+                        ancestor.Progeny[progenyIndex] = after;
+                }
             }
 
             foreach (var newEntity in newEntities)
