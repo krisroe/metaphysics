@@ -8,13 +8,13 @@ public static class SimulationFactory
     /// <returns>mature simulation</returns>
     public static Simulation RunBaseSimulationMaturation()
     {
-        var simulation = new Simulation(SimulationClass.Base);
-
-        Console.WriteLine("One unit of resources is needed to run the simulation.");
-        simulation.AddResource(new SimulationResource(ResourceType.MetaphysicalEnergy, 1m, false));
+        var simulation = new Simulation(SimulationClass.Base, intrinsicResources:
+        [
+            new SimulationResource(ResourceType.MetaphysicalEnergy, 1m, false),
+        ]);
 
         Console.WriteLine("Understanding the simulation maturation process adds a unit of energy to the simulation.");
-        simulation.AddResource(new SimulationResource(ResourceType.MetaphysicalEnergy, 1m, false));
+        simulation.AddAvailableResource(new SimulationResource(ResourceType.MetaphysicalEnergy, 1m, false));
 
         Dictionary<SimulationEntity, SimulationEntity?> mapping;
         List<SimulationEntity> newEntities;
