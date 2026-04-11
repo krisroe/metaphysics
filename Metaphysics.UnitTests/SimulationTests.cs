@@ -83,7 +83,7 @@ public class SimulationTests
     }
 
     [TestMethod]
-    public void AddResource_SupportsMultipleResources()
+    public void AddResource_MergesIntoSingleEntryPerResourceType()
     {
         using var simulation = new Simulation(SimulationClass.Base);
         var resource1 = new SimulationResource(ResourceType.MetaphysicalEnergy, 50m, false);
@@ -92,7 +92,8 @@ public class SimulationTests
         simulation.AddResource(resource1);
         simulation.AddResource(resource2);
 
-        Assert.HasCount(2, simulation.Resources);
+        Assert.HasCount(1, simulation.Resources);
+        Assert.AreEqual(125m, simulation.Resources[0].Quantity);
     }
 
     [TestMethod]
@@ -158,6 +159,7 @@ public class SimulationTests
     public void AddOrChangeEntities_OnDeath_RemovesEntityAndReallocatesResources()
     {
         using var simulation = new Simulation(SimulationClass.Base);
+        simulation.AddResource(new SimulationResource(ResourceType.MetaphysicalEnergy, 3m, false));
         var alive = new SimulationEntity("Organism");
         alive.Resources.Add(new SimulationResource(ResourceType.MetaphysicalEnergy, 5m, true));
         alive.Resources.Add(new SimulationResource(ResourceType.MetaphysicalEnergy, 3m, false));
@@ -169,8 +171,204 @@ public class SimulationTests
         Assert.IsEmpty(simulation.Entities);
         Assert.HasCount(1, simulation.Resources);
         Assert.AreEqual(5m, simulation.Resources[0].Quantity);
-        Assert.HasCount(1, simulation.UsedUpResources);
-        Assert.AreEqual(3m, simulation.UsedUpResources[0].Quantity);
+        Assert.IsEmpty(simulation.UsedUpResources);
+    }
+
+    [TestMethod]
+    public void AddOrChangeEntities_SimulationResources_ReflectEntityValueAddChange()
+    {
+        using var simulation = new Simulation(SimulationClass.Base);
+        simulation.AddResource(new SimulationResource(ResourceType.MetaphysicalEnergy, 5m, false));
+
+        // Create entity with 1 non-value-add energy → simulation goes from 5 to 4
+        var v1 = new SimulationEntity("Organism");
+        v1.Resources.Add(new SimulationResource(ResourceType.MetaphysicalEnergy, 1m, false));
+        simulation.AddOrChangeEntities(new Dictionary<SimulationEntity, SimulationEntity?>(), [v1], simulation);
+        Assert.AreEqual(4m, simulation.Resources.Sum(r => r.Quantity));
+
+        // Add 1 value-add energy alongside existing non-value-add → simulation energy unchanged
+        var v2 = new SimulationEntity(v1);
+        v2.Resources.Add(new SimulationResource(ResourceType.MetaphysicalEnergy, 1m, true));
+        simulation.AddOrChangeEntities(new Dictionary<SimulationEntity, SimulationEntity?> { { v1, v2 } }, [], simulation);
+        Assert.AreEqual(4m, simulation.Resources.Sum(r => r.Quantity));
+
+        // Kill entity → value-add resource harvested, simulation goes from 4 to 5
+        var v3 = new SimulationEntity(v2) { Status = SimulationEntityStatus.Deceased };
+        simulation.AddOrChangeEntities(new Dictionary<SimulationEntity, SimulationEntity?> { { v2, v3 } }, [], simulation);
+        Assert.AreEqual(5m, simulation.Resources.Sum(r => r.Quantity));
+    }
+
+    [TestMethod]
+    public void AddOrChangeEntities_SimulationResources_ReflectEntityNonValueAddChange()
+    {
+        using var simulation = new Simulation(SimulationClass.Base);
+        simulation.AddResource(new SimulationResource(ResourceType.MetaphysicalEnergy, 5m, false));
+
+        // Create entity with 1 non-value-add energy → simulation goes from 5 to 4
+        var v1 = new SimulationEntity("Organism");
+        v1.Resources.Add(new SimulationResource(ResourceType.MetaphysicalEnergy, 1m, false));
+        simulation.AddOrChangeEntities(new Dictionary<SimulationEntity, SimulationEntity?>(), [v1], simulation);
+        Assert.AreEqual(4m, simulation.Resources.Sum(r => r.Quantity));
+
+        // Change entity to 3 non-value-add energy → simulation goes from 4 to 2
+        var v2 = new SimulationEntity("Organism");
+        v2.Resources.Add(new SimulationResource(ResourceType.MetaphysicalEnergy, 3m, false));
+        simulation.AddOrChangeEntities(new Dictionary<SimulationEntity, SimulationEntity?> { { v1, v2 } }, [], simulation);
+        Assert.AreEqual(2m, simulation.Resources.Sum(r => r.Quantity));
+
+        // Change entity to 2 non-value-add energy → simulation resources unchanged, waste goes up by 1
+        var v3 = new SimulationEntity("Organism");
+        v3.Resources.Add(new SimulationResource(ResourceType.MetaphysicalEnergy, 2m, false));
+        simulation.AddOrChangeEntities(new Dictionary<SimulationEntity, SimulationEntity?> { { v2, v3 } }, [], simulation);
+        Assert.AreEqual(2m, simulation.Resources.Sum(r => r.Quantity));
+        Assert.AreEqual(1m, simulation.UsedUpResources.Sum(r => r.Quantity));
+    }
+
+    [TestMethod]
+    public void AddOrChangeEntities_SimulationResources_ReflectSimultaneousDeathAndResourceChange()
+    {
+        using var simulation = new Simulation(SimulationClass.Base);
+        simulation.AddResource(new SimulationResource(ResourceType.MetaphysicalEnergy, 5m, false));
+
+        // Create entity with 1 non-value-add energy → simulation goes from 5 to 4
+        var v1 = new SimulationEntity("Organism");
+        v1.Resources.Add(new SimulationResource(ResourceType.MetaphysicalEnergy, 1m, false));
+        simulation.AddOrChangeEntities(new Dictionary<SimulationEntity, SimulationEntity?>(), [v1], simulation);
+        Assert.AreEqual(4m, simulation.Resources.Sum(r => r.Quantity));
+
+        // Add 3 value-add energy alongside existing non-value-add → simulation energy unchanged
+        var v2 = new SimulationEntity(v1);
+        v2.Resources.Add(new SimulationResource(ResourceType.MetaphysicalEnergy, 3m, true));
+        simulation.AddOrChangeEntities(new Dictionary<SimulationEntity, SimulationEntity?> { { v1, v2 } }, [], simulation);
+        Assert.AreEqual(4m, simulation.Resources.Sum(r => r.Quantity));
+
+        // Kill entity, simultaneously changing non-value-add energy from 1 to 2:
+        // simulation goes down by 1 (extra non-value-add) and up by 3 (harvested value-add) → net +2
+        // no waste, since the IsValueAdd=false increase is provided by the simulation, not released
+        var v3 = new SimulationEntity("Organism") { Status = SimulationEntityStatus.Deceased };
+        v3.Resources.Add(new SimulationResource(ResourceType.MetaphysicalEnergy, 2m, false));
+        v3.Resources.Add(new SimulationResource(ResourceType.MetaphysicalEnergy, 3m, true));
+        simulation.AddOrChangeEntities(new Dictionary<SimulationEntity, SimulationEntity?> { { v2, v3 } }, [], simulation);
+        Assert.AreEqual(6m, simulation.Resources.Sum(r => r.Quantity));
+        Assert.IsEmpty(simulation.UsedUpResources);
+    }
+
+    [TestMethod]
+    public void AddOrChangeEntities_SimulationResources_WasteEnergyWhenEntityLosesNonValueAdd()
+    {
+        using var simulation = new Simulation(SimulationClass.Base);
+        simulation.AddResource(new SimulationResource(ResourceType.MetaphysicalEnergy, 5m, false));
+
+        var v1 = new SimulationEntity("Organism");
+        v1.Resources.Add(new SimulationResource(ResourceType.MetaphysicalEnergy, 2m, false));
+        simulation.AddOrChangeEntities(new Dictionary<SimulationEntity, SimulationEntity?>(), [v1], simulation);
+        Assert.AreEqual(3m, simulation.Resources.Sum(r => r.Quantity));
+
+        var v2 = new SimulationEntity(v1);
+        v2.Resources.Add(new SimulationResource(ResourceType.MetaphysicalEnergy, 4m, true));
+        simulation.AddOrChangeEntities(new Dictionary<SimulationEntity, SimulationEntity?> { { v1, v2 } }, [], simulation);
+        Assert.AreEqual(3m, simulation.Resources.Sum(r => r.Quantity));
+
+        // Entity loses 1 non-value-add energy while alive → goes to waste, simulation resources unchanged
+        var v3 = new SimulationEntity("Organism");
+        v3.Resources.Add(new SimulationResource(ResourceType.MetaphysicalEnergy, 1m, false));
+        v3.Resources.Add(new SimulationResource(ResourceType.MetaphysicalEnergy, 4m, true));
+        simulation.AddOrChangeEntities(new Dictionary<SimulationEntity, SimulationEntity?> { { v2, v3 } }, [], simulation);
+        Assert.AreEqual(3m, simulation.Resources.Sum(r => r.Quantity));
+        Assert.AreEqual(1m, simulation.UsedUpResources.Sum(r => r.Quantity));
+    }
+
+    [TestMethod]
+    public void AddOrChangeEntities_SimulationResources_HarvestAbsorbsNonValueAddRelease()
+    {
+        using var simulation = new Simulation(SimulationClass.Base);
+        simulation.AddResource(new SimulationResource(ResourceType.MetaphysicalEnergy, 5m, false));
+
+        var v1 = new SimulationEntity("Organism");
+        v1.Resources.Add(new SimulationResource(ResourceType.MetaphysicalEnergy, 2m, false));
+        simulation.AddOrChangeEntities(new Dictionary<SimulationEntity, SimulationEntity?>(), [v1], simulation);
+        Assert.AreEqual(3m, simulation.Resources.Sum(r => r.Quantity));
+
+        var v2 = new SimulationEntity(v1);
+        v2.Resources.Add(new SimulationResource(ResourceType.MetaphysicalEnergy, 4m, true));
+        simulation.AddOrChangeEntities(new Dictionary<SimulationEntity, SimulationEntity?> { { v1, v2 } }, [], simulation);
+        Assert.AreEqual(3m, simulation.Resources.Sum(r => r.Quantity));
+
+        // Entity dies with 1 less non-value-add; the 1 released is absorbed into the 4 harvested → net +3
+        var v3 = new SimulationEntity("Organism") { Status = SimulationEntityStatus.Deceased };
+        v3.Resources.Add(new SimulationResource(ResourceType.MetaphysicalEnergy, 1m, false));
+        v3.Resources.Add(new SimulationResource(ResourceType.MetaphysicalEnergy, 4m, true));
+        simulation.AddOrChangeEntities(new Dictionary<SimulationEntity, SimulationEntity?> { { v2, v3 } }, [], simulation);
+        Assert.AreEqual(6m, simulation.Resources.Sum(r => r.Quantity));
+        Assert.IsEmpty(simulation.UsedUpResources);
+    }
+
+    [TestMethod]
+    public void AddOrChangeEntities_SimulationResources_HarvestPartiallyAbsorbsNonValueAddRelease()
+    {
+        using var simulation = new Simulation(SimulationClass.Base);
+        simulation.AddResource(new SimulationResource(ResourceType.MetaphysicalEnergy, 10m, false));
+
+        var v1 = new SimulationEntity("Organism");
+        v1.Resources.Add(new SimulationResource(ResourceType.MetaphysicalEnergy, 5m, false));
+        simulation.AddOrChangeEntities(new Dictionary<SimulationEntity, SimulationEntity?>(), [v1], simulation);
+        Assert.AreEqual(5m, simulation.Resources.Sum(r => r.Quantity));
+
+        var v2 = new SimulationEntity(v1);
+        v2.Resources.Add(new SimulationResource(ResourceType.MetaphysicalEnergy, 2m, true));
+        simulation.AddOrChangeEntities(new Dictionary<SimulationEntity, SimulationEntity?> { { v1, v2 } }, [], simulation);
+        Assert.AreEqual(5m, simulation.Resources.Sum(r => r.Quantity));
+
+        // Entity dies with 3 less non-value-add; 2 harvested absorbs 2 of the 3 released → 1 goes to waste
+        var v3 = new SimulationEntity("Organism") { Status = SimulationEntityStatus.Deceased };
+        v3.Resources.Add(new SimulationResource(ResourceType.MetaphysicalEnergy, 2m, false));
+        v3.Resources.Add(new SimulationResource(ResourceType.MetaphysicalEnergy, 2m, true));
+        simulation.AddOrChangeEntities(new Dictionary<SimulationEntity, SimulationEntity?> { { v2, v3 } }, [], simulation);
+        Assert.AreEqual(5m, simulation.Resources.Sum(r => r.Quantity));
+        Assert.AreEqual(1m, simulation.UsedUpResources.Sum(r => r.Quantity));
+    }
+
+    [TestMethod]
+    public void AddOrChangeEntities_Throws_WhenEntityEnergyIncreaseExceedsSimulationResources()
+    {
+        using var simulation = new Simulation(SimulationClass.Base);
+        simulation.AddResource(new SimulationResource(ResourceType.MetaphysicalEnergy, 15m, false));
+
+        var v1 = new SimulationEntity("Organism");
+        v1.Resources.Add(new SimulationResource(ResourceType.MetaphysicalEnergy, 10m, false));
+        simulation.AddOrChangeEntities(new Dictionary<SimulationEntity, SimulationEntity?>(), [v1], simulation);
+        Assert.AreEqual(5m, simulation.Resources.Sum(r => r.Quantity));
+
+        // Killing the entity and increasing non-value-add to 20 requires 10 more from simulation (only 5 available)
+        var v2 = new SimulationEntity("Organism") { Status = SimulationEntityStatus.Deceased };
+        v2.Resources.Add(new SimulationResource(ResourceType.MetaphysicalEnergy, 20m, false));
+        Assert.ThrowsExactly<InvalidOperationException>(() =>
+            simulation.AddOrChangeEntities(new Dictionary<SimulationEntity, SimulationEntity?> { { v1, v2 } }, [], simulation));
+    }
+
+    [TestMethod]
+    public void AddOrChangeEntities_EntityEnergyIncreaseSucceedsWhenHarvestCoversIt()
+    {
+        using var simulation = new Simulation(SimulationClass.Base);
+        simulation.AddResource(new SimulationResource(ResourceType.MetaphysicalEnergy, 15m, false));
+
+        var v1 = new SimulationEntity("Organism");
+        v1.Resources.Add(new SimulationResource(ResourceType.MetaphysicalEnergy, 10m, false));
+        simulation.AddOrChangeEntities(new Dictionary<SimulationEntity, SimulationEntity?>(), [v1], simulation);
+        Assert.AreEqual(5m, simulation.Resources.Sum(r => r.Quantity));
+
+        var v2 = new SimulationEntity(v1);
+        v2.Resources.Add(new SimulationResource(ResourceType.MetaphysicalEnergy, 100m, true));
+        simulation.AddOrChangeEntities(new Dictionary<SimulationEntity, SimulationEntity?> { { v1, v2 } }, [], simulation);
+        Assert.AreEqual(5m, simulation.Resources.Sum(r => r.Quantity));
+
+        // Killing entity and increasing non-value-add to 20 requires 10 more, but 100 is harvested → net +90
+        var v3 = new SimulationEntity("Organism") { Status = SimulationEntityStatus.Deceased };
+        v3.Resources.Add(new SimulationResource(ResourceType.MetaphysicalEnergy, 20m, false));
+        v3.Resources.Add(new SimulationResource(ResourceType.MetaphysicalEnergy, 100m, true));
+        simulation.AddOrChangeEntities(new Dictionary<SimulationEntity, SimulationEntity?> { { v2, v3 } }, [], simulation);
+        Assert.AreEqual(95m, simulation.Resources.Sum(r => r.Quantity));
+        Assert.IsEmpty(simulation.UsedUpResources);
     }
 
     [TestMethod]
