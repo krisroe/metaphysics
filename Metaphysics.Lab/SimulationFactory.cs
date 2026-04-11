@@ -1,3 +1,4 @@
+using System.Diagnostics.Metrics;
 using Metaphysics.Core;
 
 public static class SimulationFactory
@@ -17,7 +18,6 @@ public static class SimulationFactory
         simulation.AddAvailableResource(new SimulationResource(ResourceType.MetaphysicalEnergy, 1m, false));
 
         Dictionary<SimulationEntity, SimulationEntity?> mapping;
-        SimulationEntity entity;
 
         //add a general observer
         mapping = new Dictionary<SimulationEntity, SimulationEntity?>();
@@ -49,13 +49,51 @@ public static class SimulationFactory
         //2. There are competing theories of abiogenesis, which is correct is not really relevant here.
         //2a. Heterotrophs first (using organic molecules in the environment as a resource), chemoautotrophy develops later
         //2b. Life begins as metabolic chemoautotrophy capturing naturally occuring reactions into pathway such as the acetyl-CoA pathway
-        Console.WriteLine("Prokaryotic unicellular organisms with chemoautotrophy come into existence.");
+        Console.WriteLine("Prokaryotic anaerobic H2-dependent, CO2 fixing proto-cellular organisms with chemoautotrophy (rudimentary acetyl-CoA-like pathway, shared metabolic system) come into existence.");
         mapping = new Dictionary<SimulationEntity, SimulationEntity?>();
-        entity = new SimulationEntity("Prokaryotic unicellular organisms with chemoautotrophy");
+        SimulationEntity lifeContainingLUCA = new SimulationEntity("Prokaryotic unicellular organisms with chemoautotrophy");
         lifeAgentEntity = CloneAndAddValueAddResource(lifeAgentEntity, mapping);
-        simulation.AddOrChangeEntities(mapping, [entity], simulation);
+        simulation.AddOrChangeEntities(mapping, [lifeContainingLUCA], simulation);
+
+        //Archaea and bacteria diverge (~3.7–3.5 billion years ago)
+        //The leading explanation is membrane divergence (ether vs ester lipids, different glycerol chirality)
+        Console.WriteLine("Bacteria and Archaea diverge.");
+        mapping = new Dictionary<SimulationEntity, SimulationEntity?>();
+        SimulationEntity newLifeContainingLUCA = new SimulationEntity(lifeContainingLUCA, false, true);
+        SimulationEntity archaea = new SimulationEntity(newLifeContainingLUCA, false, false, "Archaea");
+        archaea.SetAncestor(newLifeContainingLUCA);
+        SimulationEntity bacteria = new SimulationEntity(newLifeContainingLUCA, false, false, "Bacteria");
+        bacteria.SetAncestor(newLifeContainingLUCA);
+        newLifeContainingLUCA.Resources.Add(new SimulationResource(ResourceType.MetaphysicalEnergy, 2, true));
+        mapping[lifeContainingLUCA] = newLifeContainingLUCA;
+        simulation.AddOrChangeEntities(mapping, [archaea, bacteria], simulation);
+
+        //Methanogens develop as a branch of Archaea (~3.8 to 3.5 billion years ago)
+        Console.WriteLine("Methanogogens develop as a branch of Archaea");
+        mapping = new Dictionary<SimulationEntity, SimulationEntity?>();
+        var evolutionResult = Evolve(mapping, archaea, "Archaea Methanogens");
+        simulation.AddOrChangeEntities(mapping, [evolutionResult.evolved], simulation);
+
+        //Pre-photosynthetic pathways (Energy = moving electrons from a high-energy donor → to a lower-energy acceptor):
+        //1. Acetogenesis (CO₂ + H₂ → acetate)
+        //2. Methanogenesis (CO₂ + H₂ → methane), found in archaea
+        //3. Sulfur reduction (SO₄²⁻ / S⁰ → H₂S)
+        //4. Sulfur oxidation (H₂S → S⁰ / SO₄²⁻)
+        //5. Iron oxidation (Fe²⁺ → Fe³⁺)
+        //6. Iron reduction (Fe³⁺ → Fe²⁺)
 
         return simulation;
+    }
+
+    public static (SimulationEntity clone, SimulationEntity evolved) Evolve(
+        Dictionary<SimulationEntity, SimulationEntity?> mapping,
+        SimulationEntity entity,
+        string evolvedName)
+    {
+        var clone = CloneAndAddValueAddResource(entity, mapping);
+        var evolved = new SimulationEntity(entity, copyResources: false, name: evolvedName);
+        evolved.SetAncestor(clone);
+        return (clone, evolved);
     }
 
     private static SimulationEntity CloneAndAddValueAddResource(SimulationEntity entity, Dictionary<SimulationEntity, SimulationEntity?> mapping)

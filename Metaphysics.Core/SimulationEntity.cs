@@ -21,21 +21,35 @@ public class SimulationEntity
     public List<SimulationResource> Resources { get; } = new();
     public bool IsAgent { get; set; } = false;
     public bool IsObserver { get; set; } = false;
+    internal SimulationEntity? Ancestor { get; set; }
+    internal List<SimulationEntity> Progeny { get; } = new();
+
+    public void SetAncestor(SimulationEntity ancestor)
+    {
+        Ancestor = ancestor;
+        ancestor.Progeny.Add(this);
+    }
 
     public SimulationEntity(string name)
     {
         Name = name;
     }
 
-    public SimulationEntity(SimulationEntity source)
+    public SimulationEntity(SimulationEntity source, bool deepClone = false, bool copyResources = true, string? name = null)
     {
-        Name = source.Name;
+        Name = name ?? source.Name;
         Status = source.Status;
         if (source._individualId != Guid.Empty)
             _individualId = source._individualId;
-        Resources.AddRange(source.Resources.Select(r => r with { }));
+        if (copyResources)
+            Resources.AddRange(source.Resources.Select(r => r with { }));
         IsAgent = source.IsAgent;
         IsObserver = source.IsObserver;
+        Ancestor = deepClone && source.Ancestor != null
+            ? new SimulationEntity(source.Ancestor, deepClone: true)
+            : source.Ancestor;
+        if (deepClone)
+            Progeny.AddRange(source.Progeny.Select(p => new SimulationEntity(p, deepClone: true)));
     }
 
     public override string ToString() => Name;
