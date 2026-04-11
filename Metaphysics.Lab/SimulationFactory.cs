@@ -17,7 +17,6 @@ public static class SimulationFactory
         simulation.AddAvailableResource(new SimulationResource(ResourceType.MetaphysicalEnergy, 1m, false));
 
         Dictionary<SimulationEntity, SimulationEntity?> mapping;
-        List<SimulationEntity> newEntities;
         SimulationEntity entity;
 
         //add a general observer
@@ -27,8 +26,7 @@ public static class SimulationFactory
             IsObserver = true,
         };
         observerEntity.Resources.Add(new SimulationResource(ResourceType.MetaphysicalEnergy, 1, false));
-        newEntities = new List<SimulationEntity>() { observerEntity };
-        simulation.AddOrChangeEntities(mapping, newEntities, simulation);
+        simulation.AddOrChangeEntities(mapping, [observerEntity], simulation);
 
         Console.WriteLine("Lots of physics stuff happens in the simulation.");
 
@@ -41,9 +39,8 @@ public static class SimulationFactory
         {
             IsAgent = true,
         };
-        SimulationEntity newObserver = new SimulationEntity(observerEntity);
-        newObserver.Resources.Add(new SimulationResource(ResourceType.MetaphysicalEnergy, 1, true));
-        mapping[observerEntity] = newObserver;
+        SimulationEntity newObserver = CloneAndAddValueAddResource(observerEntity, mapping);
+        simulation.AddOrChangeEntities(mapping, [entity], simulation);
 
         //Lots of stuff happens in the simulation, but the relevant milestone is the first life forms.
         //Timeline for abiogeneis is 3.8 to 3.5 billion years ago, but possibly back to 4.1 billion years ago.
@@ -70,5 +67,13 @@ public static class SimulationFactory
         simulation.AddOrChangeEntities(new Dictionary<SimulationEntity, SimulationEntity?> { { nextIteration, deceasedFirstOrganisms } }, [], simulation);
 
         return simulation;
+    }
+
+    private static SimulationEntity CloneAndAddValueAddResource(SimulationEntity entity, Dictionary<SimulationEntity, SimulationEntity?> mapping)
+    {
+        var clone = new SimulationEntity(entity);
+        clone.Resources.Add(new SimulationResource(ResourceType.MetaphysicalEnergy, 1, true));
+        mapping[entity] = clone;
+        return clone;
     }
 }
