@@ -30,13 +30,17 @@ public class SimulationTests
     [TestMethod]
     public void AddAvailableResource_AddsResourceToList()
     {
-        using var simulation = new Simulation(SimulationClass.Base);
-        var resource = new SimulationResource(ResourceType.MetaphysicalEnergy, 100m, false);
+        var intrinsicResource = new SimulationResource(ResourceType.MetaphysicalEnergy, 50m, false);
+        using var simulation = new Simulation(SimulationClass.Base, intrinsicResources: [intrinsicResource]);
+        simulation.AddIntrinsicResource(new SimulationResource(ResourceType.MetaphysicalEnergy, 10m, false));
+        var availableResource = new SimulationResource(ResourceType.MetaphysicalEnergy, 100m, false);
 
-        simulation.AddAvailableResource(resource);
+        simulation.AddAvailableResource(availableResource);
 
+        Assert.HasCount(1, simulation.IntrinsicResources);
+        Assert.AreEqual(60m, simulation.IntrinsicResources[0].Quantity);
         Assert.HasCount(1, simulation.AvailableResources);
-        Assert.AreEqual(resource, simulation.AvailableResources[0]);
+        Assert.AreEqual(100m, simulation.AvailableResources[0].Quantity);
     }
 
     [TestMethod]

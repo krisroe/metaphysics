@@ -99,7 +99,6 @@ public class Simulation : IDisposable
     public void AddIntrinsicResource(SimulationResource resource)
     {
         MergeResourceIntoCollection(_intrinsicResources, resource);
-        MergeResourceIntoCollection(_availableResources, resource);
     }
 
     public void UseUpResource(SimulationResource resource)
