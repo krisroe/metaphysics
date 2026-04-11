@@ -75,33 +75,31 @@ public class Simulation : IDisposable
 
     public void AddResource(SimulationResource resource)
     {
-        _resources.Add(resource);
+        MergeResourceIntoCollection(_resources, resource);
     }
 
     public void UseUpResource(SimulationResource resource)
     {
-        decimal available = _resources.Where(r => r.ResourceType == resource.ResourceType).Sum(r => r.Quantity);
+        var existing = _resources.FirstOrDefault(r => r.ResourceType == resource.ResourceType);
+        decimal available = existing?.Quantity ?? 0;
         if (available < resource.Quantity)
             throw new InvalidOperationException($"Insufficient {resource.ResourceType} resources. Required: {resource.Quantity}, Available: {available}.");
 
-        decimal remaining = resource.Quantity;
-        foreach (var r in _resources.Where(r => r.ResourceType == resource.ResourceType).ToList())
-        {
-            if (r.Quantity <= remaining)
-            {
-                _resources.Remove(r);
-                remaining -= r.Quantity;
-            }
-            else
-            {
-                _resources.Remove(r);
-                _resources.Add(new SimulationResource(r.ResourceType, r.Quantity - remaining, r.IsValueAdd));
-                remaining = 0;
-            }
-            if (remaining == 0) break;
-        }
+        if (existing!.Quantity == resource.Quantity)
+            _resources.Remove(existing);
+        else
+            _resources[_resources.IndexOf(existing)] = existing with { Quantity = existing.Quantity - resource.Quantity };
 
-        _usedUpResources.Add(resource);
+        MergeResourceIntoCollection(_usedUpResources, resource);
+    }
+
+    private static void MergeResourceIntoCollection(List<SimulationResource> collection, SimulationResource resource)
+    {
+        var existing = collection.FirstOrDefault(r => r.ResourceType == resource.ResourceType);
+        if (existing != null)
+            collection[collection.IndexOf(existing)] = existing with { Quantity = existing.Quantity + resource.Quantity };
+        else
+            collection.Add(resource);
     }
 
     private List<Simulation> GetAncestors()
@@ -135,6 +133,29 @@ public class Simulation : IDisposable
             if (!ValidateAddOrChangeEntitiesEvent(entityMapping, newEntities))
                 throw new InvalidOperationException("AddOrChangeEntities validation failed.");
 
+            // Compute and apply all resource changes upfront
+            var (resourceChanges, wasteChanges) = ComputeEntityEventSimulationResourcesDelta(entityMapping, newEntities);
+
+            foreach (var (type, change) in resourceChanges)
+            {
+                if (change > 0)
+                {
+                    MergeResourceIntoCollection(_resources, new SimulationResource(type, change, true));
+                }
+                else if (change < 0)
+                {
+                    decimal deduction = -change;
+                    var existing = _resources.FirstOrDefault(r => r.ResourceType == type)!;
+                    if (existing.Quantity == deduction)
+                        _resources.Remove(existing);
+                    else
+                        _resources[_resources.IndexOf(existing)] = existing with { Quantity = existing.Quantity - deduction };
+                }
+            }
+            foreach (var (type, qty) in wasteChanges)
+                MergeResourceIntoCollection(_usedUpResources, new SimulationResource(type, qty, false));
+
+            // Update entity lists
             foreach (var (before, after) in entityMapping)
             {
                 _entities.Remove(before);
@@ -145,20 +166,8 @@ public class Simulation : IDisposable
                 bool entityDied = before.Status == SimulationEntityStatus.Alive
                     && after.Status == SimulationEntityStatus.Deceased;
 
-                if (entityDied)
-                {
-                    foreach (var resource in after.Resources)
-                    {
-                        if (resource.IsValueAdd)
-                            _resources.Add(resource);
-                        else
-                            _usedUpResources.Add(resource);
-                    }
-                }
-                else
-                {
+                if (!entityDied)
                     _entities.Add(after);
-                }
 
                 if (after.IndividualId != Guid.Empty)
                     _entitiesByIndividualId[after.IndividualId] = after;
@@ -173,6 +182,80 @@ public class Simulation : IDisposable
         }
     }
 
+    protected static (Dictionary<ResourceType, decimal> ResourceChanges, Dictionary<ResourceType, decimal> WasteChanges)
+        ComputeEntityEventSimulationResourcesDelta(
+            Dictionary<SimulationEntity, SimulationEntity?> entityMapping,
+            List<SimulationEntity> newEntities)
+    {
+        // Compute non-value-add delta per resource type
+        var nonValueAddDelta = new Dictionary<ResourceType, decimal>();
+
+        foreach (var (before, after) in entityMapping)
+        {
+            IEnumerable<SimulationResource> beforeNonValueAdd = before.Resources.Where(r => !r.IsValueAdd);
+            IEnumerable<SimulationResource> afterNonValueAdd = after?.Resources.Where(r => !r.IsValueAdd) ?? [];
+
+            var allTypes = beforeNonValueAdd.Select(r => r.ResourceType)
+                .Concat(afterNonValueAdd.Select(r => r.ResourceType))
+                .Distinct();
+
+            foreach (var resourceType in allTypes)
+            {
+                decimal afterQty = afterNonValueAdd.Where(r => r.ResourceType == resourceType).Sum(r => r.Quantity);
+                decimal beforeQty = beforeNonValueAdd.Where(r => r.ResourceType == resourceType).Sum(r => r.Quantity);
+                nonValueAddDelta[resourceType] = nonValueAddDelta.GetValueOrDefault(resourceType) + afterQty - beforeQty;
+            }
+        }
+
+        foreach (var newEntity in newEntities)
+        {
+            foreach (var resourceType in newEntity.Resources.Where(r => !r.IsValueAdd).Select(r => r.ResourceType).Distinct())
+            {
+                decimal qty = newEntity.Resources.Where(r => !r.IsValueAdd && r.ResourceType == resourceType).Sum(r => r.Quantity);
+                nonValueAddDelta[resourceType] = nonValueAddDelta.GetValueOrDefault(resourceType) + qty;
+            }
+        }
+
+        // Compute harvest per resource type from deceased entities
+        var harvestByType = entityMapping
+            .Where(kv => kv.Key.Status == SimulationEntityStatus.Alive && kv.Value?.Status == SimulationEntityStatus.Deceased)
+            .SelectMany(kv => kv.Value!.Resources.Where(r => r.IsValueAdd))
+            .GroupBy(r => r.ResourceType)
+            .ToDictionary(g => g.Key, g => g.Sum(r => r.Quantity));
+
+        // Net non-value-add delta against harvest to produce final resource and waste changes
+        var resourceChanges = new Dictionary<ResourceType, decimal>();
+        var wasteChanges = new Dictionary<ResourceType, decimal>();
+
+        foreach (var type in nonValueAddDelta.Keys.Union(harvestByType.Keys))
+        {
+            decimal delta = nonValueAddDelta.GetValueOrDefault(type);
+            decimal harvest = harvestByType.GetValueOrDefault(type);
+
+            if (delta >= 0)
+            {
+                // Entities need more (or same): harvest offsets; remainder is surplus or deficit
+                decimal netNeed = delta - harvest;
+                if (netNeed != 0)
+                    resourceChanges[type] = -netNeed; // positive = simulation gains; negative = simulation provides
+            }
+            else
+            {
+                // Entities released resources: offset against harvest before wasting the remainder
+                decimal released = -delta;
+                decimal absorbed = Math.Min(released, harvest);
+                decimal harvestSurplus = harvest - absorbed;
+                decimal waste = released - absorbed;
+                if (harvestSurplus > 0)
+                    resourceChanges[type] = harvestSurplus;
+                if (waste > 0)
+                    wasteChanges[type] = waste;
+            }
+        }
+
+        return (resourceChanges, wasteChanges);
+    }
+
     protected virtual void OnChildEntityEvent(Dictionary<SimulationEntity, SimulationEntity?> entityMapping, List<SimulationEntity> newEntities, Simulation originator, int levelsUp, int passNumber, ref bool cancelled)
     {
         if (!ValidateAddOrChangeEntitiesEvent(entityMapping, newEntities))
@@ -181,6 +264,18 @@ public class Simulation : IDisposable
 
     protected bool ValidateAddOrChangeEntitiesEvent(Dictionary<SimulationEntity, SimulationEntity?> entityMapping, List<SimulationEntity> newEntities)
     {
+        // Check that resource changes do not overdraw any simulation resource
+        var (resourceChanges, _) = ComputeEntityEventSimulationResourcesDelta(entityMapping, newEntities);
+        foreach (var (resourceType, change) in resourceChanges)
+        {
+            if (change < 0)
+            {
+                decimal available = _resources.FirstOrDefault(r => r.ResourceType == resourceType)?.Quantity ?? 0;
+                if (available < -change)
+                    return false;
+            }
+        }
+
         // Check for resurrection, duplicate entity references, and before-entity individual ID consistency
         var allEntities = new HashSet<SimulationEntity>();
         foreach (var (before, after) in entityMapping)
