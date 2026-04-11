@@ -3,7 +3,8 @@
 public class Simulation : IDisposable
 {
     private bool _disposed = false;
-    private readonly List<SimulationResource> _resources = new();
+    private readonly List<SimulationResource> _availableResources = new();
+    private readonly List<SimulationResource> _intrinsicResources = new();
     private readonly List<SimulationResource> _usedUpResources = new();
     private readonly List<SimulationEntity> _entities = new();
     private readonly List<SimulationSet> _simulationSets = new();
@@ -11,16 +12,20 @@ public class Simulation : IDisposable
 
     public Simulation? Parent { get; }
     public SimulationClass SimulationClass { get; }
-    public IReadOnlyList<SimulationResource> Resources => _resources;
+    public IReadOnlyList<SimulationResource> AvailableResources => _availableResources;
+    public IReadOnlyList<SimulationResource> IntrinsicResources => _intrinsicResources;
     public IReadOnlyList<SimulationResource> UsedUpResources => _usedUpResources;
     public IReadOnlyList<SimulationEntity> Entities => _entities;
     public IReadOnlyList<SimulationSet> SimulationSets => _simulationSets;
     public IReadOnlyDictionary<Guid, SimulationEntity> EntitiesByIndividualId => _entitiesByIndividualId;
 
-    public Simulation(SimulationClass simulationClass, Simulation? parent = null)
+    public Simulation(SimulationClass simulationClass, Simulation? parent = null, IEnumerable<SimulationResource>? intrinsicResources = null)
     {
         SimulationClass = simulationClass;
         Parent = parent;
+        if (intrinsicResources != null)
+            foreach (var resource in intrinsicResources)
+                AddIntrinsicResource(resource);
         Console.WriteLine("Simulation beginning...");
     }
 
@@ -38,6 +43,16 @@ public class Simulation : IDisposable
             // Second pass: bottom-up (immediate parent to root)
             for (int i = 0; i < ancestors.Count; i++)
                 ancestors[i].OnChildCreateSimulation(simulation, simulationSet, simulationClass, originator: this, i + 1, 2);
+
+            if (simulation.IntrinsicResources.Count == 0)
+                throw new SimulationCreationFailureException("Cannot create a simulation with no intrinsic resources.");
+
+            foreach (var resource in simulation.IntrinsicResources)
+            {
+                decimal available = _availableResources.FirstOrDefault(r => r.ResourceType == resource.ResourceType)?.Quantity ?? 0;
+                if (available < resource.Quantity)
+                    throw new SimulationCreationFailureException($"Insufficient {resource.ResourceType} to create simulation. Required: {resource.Quantity}, Available: {available}.");
+            }
 
             success = true;
         }
@@ -70,25 +85,33 @@ public class Simulation : IDisposable
                     simulationSet.LiveSimulation = simulation;
                     break;
             }
+
+            foreach (var resource in simulation.IntrinsicResources)
+                UseUpResource(resource);
         }
     }
 
-    public void AddResource(SimulationResource resource)
+    public void AddAvailableResource(SimulationResource resource)
     {
-        MergeResourceIntoCollection(_resources, resource);
+        MergeResourceIntoCollection(_availableResources, resource);
+    }
+
+    public void AddIntrinsicResource(SimulationResource resource)
+    {
+        MergeResourceIntoCollection(_intrinsicResources, resource);
     }
 
     public void UseUpResource(SimulationResource resource)
     {
-        var existing = _resources.FirstOrDefault(r => r.ResourceType == resource.ResourceType);
+        var existing = _availableResources.FirstOrDefault(r => r.ResourceType == resource.ResourceType);
         decimal available = existing?.Quantity ?? 0;
         if (available < resource.Quantity)
             throw new InvalidOperationException($"Insufficient {resource.ResourceType} resources. Required: {resource.Quantity}, Available: {available}.");
 
         if (existing!.Quantity == resource.Quantity)
-            _resources.Remove(existing);
+            _availableResources.Remove(existing);
         else
-            _resources[_resources.IndexOf(existing)] = existing with { Quantity = existing.Quantity - resource.Quantity };
+            _availableResources[_availableResources.IndexOf(existing)] = existing with { Quantity = existing.Quantity - resource.Quantity };
 
         MergeResourceIntoCollection(_usedUpResources, resource);
     }
@@ -140,16 +163,16 @@ public class Simulation : IDisposable
             {
                 if (change > 0)
                 {
-                    MergeResourceIntoCollection(_resources, new SimulationResource(type, change, true));
+                    MergeResourceIntoCollection(_availableResources, new SimulationResource(type, change, true));
                 }
                 else if (change < 0)
                 {
                     decimal deduction = -change;
-                    var existing = _resources.FirstOrDefault(r => r.ResourceType == type)!;
+                    var existing = _availableResources.FirstOrDefault(r => r.ResourceType == type)!;
                     if (existing.Quantity == deduction)
-                        _resources.Remove(existing);
+                        _availableResources.Remove(existing);
                     else
-                        _resources[_resources.IndexOf(existing)] = existing with { Quantity = existing.Quantity - deduction };
+                        _availableResources[_availableResources.IndexOf(existing)] = existing with { Quantity = existing.Quantity - deduction };
                 }
             }
             foreach (var (type, qty) in wasteChanges)
@@ -270,7 +293,7 @@ public class Simulation : IDisposable
         {
             if (change < 0)
             {
-                decimal available = _resources.FirstOrDefault(r => r.ResourceType == resourceType)?.Quantity ?? 0;
+                decimal available = _availableResources.FirstOrDefault(r => r.ResourceType == resourceType)?.Quantity ?? 0;
                 if (available < -change)
                     return false;
             }
