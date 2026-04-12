@@ -187,8 +187,27 @@ public class Simulation : IDisposable
                         _entities.Add(change.Entity);
                         if (change.Entity.IndividualId != Guid.Empty)
                             _entitiesByIndividualId[change.Entity.IndividualId] = change.Entity;
-                        if (change.Entity.Ancestor != null && !change.Entity.Ancestor.Progeny.Contains(change.Entity))
+                        if (change.ReplaceEntity != null)
+                        {
+                            change.Entity.Ancestor = change.ReplaceEntity.Ancestor;
+                            if (change.ReplaceEntity.Ancestor != null)
+                            {
+                                change.ReplaceEntity.Ancestor.Progeny.Remove(change.ReplaceEntity);
+                                if (!change.ReplaceEntity.Ancestor.Progeny.Contains(change.Entity))
+                                    change.ReplaceEntity.Ancestor.Progeny.Add(change.Entity);
+                            }
+                            foreach (var progeny in change.ReplaceEntity.Progeny)
+                            {
+                                progeny.Ancestor = change.Entity;
+                                change.Entity.Progeny.Add(progeny);
+                            }
+                            change.ReplaceEntity.Progeny.Clear();
+                            change.ReplaceEntity.Ancestor = null;
+                        }
+                        else if (change.Entity.Ancestor != null && !change.Entity.Ancestor.Progeny.Contains(change.Entity))
+                        {
                             change.Entity.Ancestor.Progeny.Add(change.Entity);
+                        }
                         break;
                     case SimulationEntityChangeType.EntityNameChange:
                         change.Entity.Name = change.NewName!;
@@ -318,6 +337,8 @@ public class Simulation : IDisposable
             if (change.ChangeType == SimulationEntityChangeType.EntityNew)
             {
                 if (_entities.Contains(change.Entity))
+                    return false;
+                if (change.ReplaceEntity != null && !_entities.Contains(change.ReplaceEntity))
                     return false;
             }
             else
