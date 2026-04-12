@@ -355,7 +355,6 @@ public class Simulation : IDisposable
                 return false;
         }
 
-        // TODO: additional validation checks
         return true;
     }
 
