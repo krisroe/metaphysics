@@ -16,9 +16,10 @@ public class SimulationEntity
         }
     }
 
-    public string Name { get; }
+    public string Name { get; set; }
     public SimulationEntityStatus Status { get; set; } = SimulationEntityStatus.Alive;
     public List<SimulationResource> Resources { get; } = new();
+    public List<SimulationEntityConcept> Concepts { get; } = new();
     public bool IsAgent { get; set; } = false;
     public bool IsObserver { get; set; } = false;
     internal SimulationEntity? Ancestor { get; set; }
