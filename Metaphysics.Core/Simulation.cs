@@ -215,6 +215,9 @@ public class Simulation : IDisposable
         }
     }
 
+    private static IEnumerable<SimulationResource> AllResources(SimulationEntity entity) =>
+        entity.Resources.Concat(entity.Concepts.SelectMany(c => c.Resources));
+
     protected static (Dictionary<ResourceType, decimal> ResourceChanges, Dictionary<ResourceType, decimal> WasteChanges)
         ComputeEntityEventSimulationResourcesDelta(
             Dictionary<SimulationEntity, SimulationEntity?> entityMapping,
@@ -225,8 +228,8 @@ public class Simulation : IDisposable
 
         foreach (var (before, after) in entityMapping)
         {
-            IEnumerable<SimulationResource> beforeNonValueAdd = before.Resources.Where(r => !r.IsValueAdd);
-            IEnumerable<SimulationResource> afterNonValueAdd = after?.Resources.Where(r => !r.IsValueAdd) ?? [];
+            IEnumerable<SimulationResource> beforeNonValueAdd = AllResources(before).Where(r => !r.IsValueAdd);
+            IEnumerable<SimulationResource> afterNonValueAdd = after != null ? AllResources(after).Where(r => !r.IsValueAdd) : [];
 
             var allTypes = beforeNonValueAdd.Select(r => r.ResourceType)
                 .Concat(afterNonValueAdd.Select(r => r.ResourceType))
@@ -242,9 +245,9 @@ public class Simulation : IDisposable
 
         foreach (var newEntity in newEntities)
         {
-            foreach (var resourceType in newEntity.Resources.Where(r => !r.IsValueAdd).Select(r => r.ResourceType).Distinct())
+            foreach (var resourceType in AllResources(newEntity).Where(r => !r.IsValueAdd).Select(r => r.ResourceType).Distinct())
             {
-                decimal qty = newEntity.Resources.Where(r => !r.IsValueAdd && r.ResourceType == resourceType).Sum(r => r.Quantity);
+                decimal qty = AllResources(newEntity).Where(r => !r.IsValueAdd && r.ResourceType == resourceType).Sum(r => r.Quantity);
                 nonValueAddDelta[resourceType] = nonValueAddDelta.GetValueOrDefault(resourceType) + qty;
             }
         }
@@ -252,7 +255,7 @@ public class Simulation : IDisposable
         // Compute harvest per resource type from deceased entities
         var harvestByType = entityMapping
             .Where(kv => kv.Key.Status == SimulationEntityStatus.Alive && kv.Value?.Status == SimulationEntityStatus.Deceased)
-            .SelectMany(kv => kv.Value!.Resources.Where(r => r.IsValueAdd))
+            .SelectMany(kv => AllResources(kv.Value!).Where(r => r.IsValueAdd))
             .GroupBy(r => r.ResourceType)
             .ToDictionary(g => g.Key, g => g.Sum(r => r.Quantity));
 
