@@ -92,39 +92,45 @@ public static class SimulationFactory
             ],
             simulation);
 
+        Console.WriteLine("Emergence of DNA as a genetic information system");
+        AddConcept(simulation, commonLife, "DNA Genetic Information System");
+
+        //Ribosome or proto-ribosome, tRNA system
+        Console.WriteLine("Emergence of protein translation system");
+        AddConcept(simulation, commonLife, "Ribosomal translation");
+
         Console.WriteLine("Horizontal gene transfer allows characteristics to be passed between organisms.");
-        var hgtConceptChange = new SimulationEntityChange { Entity = commonLife, ChangeType = SimulationEntityChangeType.EntityNewConcept };
-        hgtConceptChange.Concepts.Add(new SimulationEntityConcept("Horizontal Gene Transfer"));
-        var hgtResourceChange = new SimulationEntityChange { Entity = commonLife, ChangeType = SimulationEntityChangeType.EntityAddOrRemoveResources };
-        hgtResourceChange.Resources.Add(new SimulationResourceDelta(ResourceType.MetaphysicalEnergy, 1m, true));
-        simulation.AddOrChangeEntitiesDelta([hgtConceptChange, hgtResourceChange], simulation);
+        AddConcept(simulation, commonLife, "Horizontal Gene Transfer");
 
-        //CO₂ + H₂ → acetate
+        //Bacteria-dominated
+        //Marginal energy yield (~ -95 kJ/mol acetate), near minimum required for life
+        //2CO₂ + 4H₂ → acetate + 2H₂O
         Console.WriteLine("Acetogenesis as a optimized version of the acetyl-coa pathway");
-        var acetogenesisConceptChange = new SimulationEntityChange { Entity = commonLife, ChangeType = SimulationEntityChangeType.EntityNewConcept };
-        acetogenesisConceptChange.Concepts.Add(new SimulationEntityConcept("Acetogenesis Pathway"));
-        var acetogenesisResourceChange = new SimulationEntityChange { Entity = commonLife, ChangeType = SimulationEntityChangeType.EntityAddOrRemoveResources };
-        acetogenesisResourceChange.Resources.Add(new SimulationResourceDelta(ResourceType.MetaphysicalEnergy, 1m, true));
-        simulation.AddOrChangeEntitiesDelta([acetogenesisConceptChange, acetogenesisResourceChange], simulation);
+        AddConcept(simulation, commonLife, "Optimized acetogenesis Pathway");
 
+        //Present in both bacteria and archae
+        //High energy (~ -150 to -200+ kJ/mol), requires sulfur
         //SO₄²⁻ / S⁰ → H₂S
         Console.WriteLine("Emergence of sulfur reduction pathways");
-        var sulfurReductionConceptChange = new SimulationEntityChange { Entity = commonLife, ChangeType = SimulationEntityChangeType.EntityNewConcept };
-        sulfurReductionConceptChange.Concepts.Add(new SimulationEntityConcept("Sulfur Reduction Pathways"));
-        var sulfurReductionResourceChange = new SimulationEntityChange { Entity = commonLife, ChangeType = SimulationEntityChangeType.EntityAddOrRemoveResources };
-        sulfurReductionResourceChange.Resources.Add(new SimulationResourceDelta(ResourceType.MetaphysicalEnergy, 1m, true));
-        simulation.AddOrChangeEntitiesDelta([sulfurReductionConceptChange, sulfurReductionResourceChange], simulation);
+        AddConcept(simulation, commonLife, "Sulfur Reduction Pathway");
 
-        //(Fe²⁺ → Fe³⁺) and (Fe³⁺ → Fe²⁺)
-        Console.WriteLine("Emergence of iron reduction and oxidation pathways");
-        var ironRedoxConceptChange = new SimulationEntityChange { Entity = commonLife, ChangeType = SimulationEntityChangeType.EntityNewConcept };
-        ironRedoxConceptChange.Concepts.Add(new SimulationEntityConcept("Iron Redox Pathways"));
-        var ironRedoxResourceChange = new SimulationEntityChange { Entity = commonLife, ChangeType = SimulationEntityChangeType.EntityAddOrRemoveResources };
-        ironRedoxResourceChange.Resources.Add(new SimulationResourceDelta(ResourceType.MetaphysicalEnergy, 1m, true));
-        simulation.AddOrChangeEntitiesDelta([ironRedoxConceptChange, ironRedoxResourceChange], simulation);
+        //Archaea specialization branch (~3.8 to 3.5 billion years ago)
+        //Moderate to high for anaerobic systems (~ -130 kJ/mol CH₄)
+        //CO₂ + 4H₂ → CH₄ + 2H₂O
+        Console.WriteLine("Emergency of methanogenesis pathways");
+        AddConcept(simulation, commonLife, "Methanogenesis Pathway");
+
+        //Moderate to high energy for anaerobic systems
+        //Fe³⁺ + electron donor (H₂ or organics) → Fe²⁺
+        Console.WriteLine("Emergence of iron reduction pathways");
+        AddConcept(simulation, commonLife, "Iron Reduction Pathway");
+
+        //Proton gradients + ATP synthesis
+        Console.WriteLine("Emergence of chemiosmosis");
+        AddConcept(simulation, commonLife, "Chemiosmosis");
 
         //Archaea and bacteria diverge (~3.7–3.5 billion years ago)
-        //The leading explanation is membrane divergence (ether vs ester lipids, different glycerol chirality)
+        //The leading explanation is membrane divergence (ether [archaea] vs ester [bacteria] lipids, different glycerol chirality)
         Console.WriteLine("Bacteria and Archaea diverge.");
         SimulationEntity archaea = new SimulationEntity(commonLife, false, false, "Archaea");
         archaea.SetAncestor(commonLife);
@@ -140,34 +146,39 @@ public static class SimulationFactory
             ],
             simulation);
 
-        //CO₂ + H₂ → methane
-        //Methanogens develop as a branch of Archaea (~3.8 to 3.5 billion years ago)
-        Console.WriteLine("Methanogens develop as a branch of Archaea");
-        Evolve(simulation, archaea, "Archaea Methanogens");
+        //TODO: end of abiogenesis era
 
+        //common in bacteria (e.g. proteobacteria, chlorobi), present in some groups of archaea (e.g. thermophiles)
         //H₂S → S⁰ / SO₄²⁻. Emerged ~3.5–3.2, expands significantly by ~3.0 bya
         Console.WriteLine("Emergence of sulfur oxidation pathways");
-        var sulfurOxidationConceptChange = new SimulationEntityChange { Entity = commonLife, ChangeType = SimulationEntityChangeType.EntityNewConcept };
-        sulfurOxidationConceptChange.Concepts.Add(new SimulationEntityConcept("Sulfur Oxidation Pathways"));
-        var sulfurOxidationResourceChange = new SimulationEntityChange { Entity = commonLife, ChangeType = SimulationEntityChangeType.EntityAddOrRemoveResources };
-        sulfurOxidationResourceChange.Resources.Add(new SimulationResourceDelta(ResourceType.MetaphysicalEnergy, 1m, true));
-        simulation.AddOrChangeEntitiesDelta([sulfurOxidationConceptChange, sulfurOxidationResourceChange], simulation);
+        AddConcept(simulation, commonLife, "Sulfur Oxidation Pathway");
+
+        //common in bacteria, rare/uncertain in archaea
+        //emerged ~3.2–2.7 billion years ago, expanded significantly closer to ~2.7–2.4 bya as sulfur cycling became more complex
+        //Example: 4S⁰ + 4H₂O → SO₄²⁻ + 3H₂S + 2H⁺
+        //Requires intermediate sulfur species (like elemental sulfur, thiosulfate)
+        Console.WriteLine("Emergence of sulfur disproportionation pathways");
+        AddConcept(simulation, commonLife, "Sulfur Disproportionation Pathway");
+
+        //common in bacteria (chlorobi, proteobacteria), mostly absent in archaea
+        //~3.2–2.7 bya, possibly earlier
+        //Fe²⁺ + light → Fe³⁺
+        Console.WriteLine("Emergence of anoxygenic (light-driven) iron oxidation pathways");
+        AddConcept(simulation, commonLife, "Iron Oxidation Pathway");
+
+        //TODO: anoxygenic photosynthesis
 
         return simulation;
     }
 
-    public static SimulationEntity Evolve(Simulation simulation, SimulationEntity entity, string evolvedName)
+    public static SimulationEntityConcept AddConcept(Simulation simulation, SimulationEntity entity, string conceptName)
     {
-        var evolved = new SimulationEntity(entity, copyResources: false, name: evolvedName);
-        evolved.SetAncestor(entity);
+        var conceptChange = new SimulationEntityChange { Entity = entity, ChangeType = SimulationEntityChangeType.EntityNewConcept };
+        SimulationEntityConcept ret = new SimulationEntityConcept(conceptName);
+        conceptChange.Concepts.Add(ret);
         var resourceChange = new SimulationEntityChange { Entity = entity, ChangeType = SimulationEntityChangeType.EntityAddOrRemoveResources };
         resourceChange.Resources.Add(new SimulationResourceDelta(ResourceType.MetaphysicalEnergy, 1m, true));
-        simulation.AddOrChangeEntitiesDelta(
-            [
-                new SimulationEntityChange { Entity = evolved, ChangeType = SimulationEntityChangeType.EntityNew },
-                resourceChange
-            ],
-            simulation);
-        return evolved;
+        simulation.AddOrChangeEntitiesDelta([conceptChange, resourceChange], simulation);
+        return ret;
     }
 }
