@@ -146,7 +146,16 @@ public static class SimulationFactory
             ],
             simulation);
 
-        //TODO: end of abiogenesis era
+        //End of abiogenesis era (~3.5 bya) — the last universal common ancestor (LUCA) emerges as a distinct lineage
+        Console.WriteLine("End of abiogenesis era. Last Universal Common Ancestor (LUCA) emerges.");
+        var luca = new SimulationEntity("Last Universal Common Ancestor");
+        simulation.AddOrChangeEntitiesDelta(
+            [
+                new SimulationEntityChange { Entity = luca, ChangeType = SimulationEntityChangeType.EntityNew, ReplaceEntity = commonLife },
+                new SimulationEntityChange { Entity = commonLife, ChangeType = SimulationEntityChangeType.EntityKill }
+            ],
+            simulation);
+        commonLife = luca;
 
         //common in bacteria (e.g. proteobacteria, chlorobi), present in some groups of archaea (e.g. thermophiles)
         //H₂S → S⁰ / SO₄²⁻. Emerged ~3.5–3.2, expands significantly by ~3.0 bya

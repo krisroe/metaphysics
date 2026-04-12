@@ -18,4 +18,5 @@ public class SimulationEntityChange
     public string? NewName { get; set; }
     public List<SimulationEntityConcept> Concepts { get; } = new();
     public Guid NewIndividualId { get; set; }
+    public SimulationEntity? ReplaceEntity { get; set; }
 }
