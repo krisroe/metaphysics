@@ -51,34 +51,36 @@ public static class SimulationFactory
         {
             IsAgent = true,
         };
-        observerEntity = ReplaceEntity(observerEntity, null, mapping, 1);
+        observerEntity = ReplaceEntity(observerEntity, null, mapping, 1, null);
         simulation.AddOrChangeEntities(mapping, [lifeAgentEntity], simulation);
 
+        //~4.0–3.8 bya
         //Energy gradients + mineral catalysis (pre-cellular)
         //Natural proton gradients, abundant H₂ and CO₂, Iron-sulfur minerals acting as catalysts
         Console.WriteLine("pre-biotic environment with pre-cellular metabolism is present.");
         mapping = new Dictionary<SimulationEntity, SimulationEntity?>();
-        prebioticEnvironment = ReplaceEntity(prebioticEnvironment, "Prebiotic Environment with pre-cellular metabolism", mapping, 0);
+        prebioticEnvironment = ReplaceEntity(prebioticEnvironment, "Prebiotic Environment with pre-cellular metabolism", mapping, 0, null);
         simulation.AddOrChangeEntities(mapping, new List<SimulationEntity>(), simulation);
 
+        //~3.8–3.6 bya
         //Proto-metabolic networks
         //Self-reinforcing chemical cycles, early Acetyl-CoA-like pathways and carbon fixation
         Console.WriteLine("pre-biotic environment with pre-cellular proto-metabolic networks is present.");
         mapping = new Dictionary<SimulationEntity, SimulationEntity?>();
-        prebioticEnvironment = ReplaceEntity(prebioticEnvironment, "Prebiotic Environment with pre-cellular proto-metabolic networks", mapping, 0);
+        prebioticEnvironment = ReplaceEntity(prebioticEnvironment, "Prebiotic Environment with pre-cellular proto-metabolic networks", mapping, 0, null);
         simulation.AddOrChangeEntities(mapping, new List<SimulationEntity>(), simulation);
 
         //Compartmentalization (proto-cells) (Lipid vesicles or mineral compartments)
         Console.WriteLine("pre-biotic environment with proto-cellular proto-metabolic networks is present.");
         mapping = new Dictionary<SimulationEntity, SimulationEntity?>();
-        prebioticEnvironment = ReplaceEntity(prebioticEnvironment, "Prebiotic Environment with proto-cellular proto-metabolic networks", mapping, 0);
+        prebioticEnvironment = ReplaceEntity(prebioticEnvironment, "Prebiotic Environment with proto-cellular proto-metabolic networks", mapping, 0, null);
         simulation.AddOrChangeEntities(mapping, new List<SimulationEntity>(), simulation);
 
         //Information systems
         //Molecules that store information and replicate (imperfectly). Likely candiate: RNA or RNA-like polymers.
         Console.WriteLine("pre-biotic environment with proto-cellular proto-metabolic networks with information is present.");
         mapping = new Dictionary<SimulationEntity, SimulationEntity?>();
-        prebioticEnvironment = ReplaceEntity(prebioticEnvironment, "Prebiotic Environment with proto-cellular proto-metabolic networks with information", mapping, 0);
+        prebioticEnvironment = ReplaceEntity(prebioticEnvironment, "Prebiotic Environment with proto-cellular proto-metabolic networks with information", mapping, 0, null);
         simulation.AddOrChangeEntities(mapping, new List<SimulationEntity>(), simulation);
 
         //Timeline for abiogeneis is 3.8 to 3.5 billion years ago, but possibly back to 4.1 billion years ago.
@@ -88,36 +90,59 @@ public static class SimulationFactory
         //2b. Life begins as metabolic chemoautotrophy capturing naturally occuring reactions into pathway such as the acetyl-CoA pathway
         Console.WriteLine("Prokaryotic anaerobic H2-dependent, CO2 fixing proto-cellular organisms with chemoautotrophy (rudimentary acetyl-CoA-like pathway, shared metabolic system) come into existence.");
         mapping = new Dictionary<SimulationEntity, SimulationEntity?>();
-        SimulationEntity lifeContainingLUCA = ReplaceEntity(prebioticEnvironment, "Prokaryotic unicellular organisms with chemoautotrophy", mapping, 0);
-        lifeAgentEntity = ReplaceEntity(lifeAgentEntity, null, mapping, 1);
+        SimulationEntity commonLife = ReplaceEntity(prebioticEnvironment, "Prokaryotic unicellular organisms with chemoautotrophy", mapping, 0, null);
+        lifeAgentEntity = ReplaceEntity(lifeAgentEntity, null, mapping, 1, null);
+        simulation.AddOrChangeEntities(mapping, new List<SimulationEntity>(), simulation);
+
+        Console.WriteLine("Horizontal gene transfer allows characteristics to be passed between organisms.");
+        mapping = new Dictionary<SimulationEntity, SimulationEntity?>();
+        commonLife = ReplaceEntity(commonLife, null, mapping, 1, new SimulationEntityConcept("Horizontal Gene Transfer"));
+        simulation.AddOrChangeEntities(mapping, new List<SimulationEntity>(), simulation);
+
+        //CO₂ + H₂ → acetate
+        Console.WriteLine("Acetogenesis as a optimized version of the acetyl-coa pathway");
+        mapping = new Dictionary<SimulationEntity, SimulationEntity?>();
+        commonLife = ReplaceEntity(commonLife, null, mapping, 1, new SimulationEntityConcept("Acetogenesis Pathway"));
+        simulation.AddOrChangeEntities(mapping, new List<SimulationEntity>(), simulation);
+
+        //SO₄²⁻ / S⁰ → H₂S
+        Console.WriteLine("Emergence of sulfur reduction pathways");
+        mapping = new Dictionary<SimulationEntity, SimulationEntity?>();
+        commonLife = ReplaceEntity(commonLife, null, mapping, 1, new SimulationEntityConcept("Sulfur Reduction Pathways"));
+        simulation.AddOrChangeEntities(mapping, new List<SimulationEntity>(), simulation);
+
+        //(Fe²⁺ → Fe³⁺) and (Fe³⁺ → Fe²⁺)
+        Console.WriteLine("Emergence of iron reduction and oxidation pathways");
+        mapping = new Dictionary<SimulationEntity, SimulationEntity?>();
+        commonLife = ReplaceEntity(commonLife, null, mapping, 1, new SimulationEntityConcept("Iron Redox Pathways"));
         simulation.AddOrChangeEntities(mapping, new List<SimulationEntity>(), simulation);
 
         //Archaea and bacteria diverge (~3.7–3.5 billion years ago)
         //The leading explanation is membrane divergence (ether vs ester lipids, different glycerol chirality)
         Console.WriteLine("Bacteria and Archaea diverge.");
         mapping = new Dictionary<SimulationEntity, SimulationEntity?>();
-        SimulationEntity newLifeContainingLUCA = new SimulationEntity(lifeContainingLUCA, false, true);
-        SimulationEntity archaea = new SimulationEntity(newLifeContainingLUCA, false, false, "Archaea");
-        archaea.SetAncestor(newLifeContainingLUCA);
-        SimulationEntity bacteria = new SimulationEntity(newLifeContainingLUCA, false, false, "Bacteria");
-        bacteria.SetAncestor(newLifeContainingLUCA);
-        newLifeContainingLUCA.Resources.Add(new SimulationResource(ResourceType.MetaphysicalEnergy, 2, true));
-        mapping[lifeContainingLUCA] = newLifeContainingLUCA;
+        SimulationEntity newCommonLife = new SimulationEntity(commonLife, false, true);
+        SimulationEntity archaea = new SimulationEntity(newCommonLife, false, false, "Archaea");
+        archaea.SetAncestor(newCommonLife);
+        SimulationEntity bacteria = new SimulationEntity(newCommonLife, false, false, "Bacteria");
+        bacteria.SetAncestor(newCommonLife);
+        newCommonLife.Resources.Add(new SimulationResource(ResourceType.MetaphysicalEnergy, 2, true));
+        mapping[commonLife] = newCommonLife;
         simulation.AddOrChangeEntities(mapping, [archaea, bacteria], simulation);
+        commonLife = newCommonLife;
 
+        //CO₂ + H₂ → methane
         //Methanogens develop as a branch of Archaea (~3.8 to 3.5 billion years ago)
         Console.WriteLine("Methanogens develop as a branch of Archaea");
         mapping = new Dictionary<SimulationEntity, SimulationEntity?>();
         var evolutionResult = Evolve(mapping, archaea, "Archaea Methanogens");
         simulation.AddOrChangeEntities(mapping, [evolutionResult.evolved], simulation);
 
-        //Pre-photosynthetic pathways (Energy = moving electrons from a high-energy donor → to a lower-energy acceptor):
-        //1. Acetogenesis (CO₂ + H₂ → acetate)
-        //2. Methanogenesis (CO₂ + H₂ → methane), found in archaea
-        //3. Sulfur reduction (SO₄²⁻ / S⁰ → H₂S)
-        //4. Sulfur oxidation (H₂S → S⁰ / SO₄²⁻)
-        //5. Iron oxidation (Fe²⁺ → Fe³⁺)
-        //6. Iron reduction (Fe³⁺ → Fe²⁺)
+        //H₂S → S⁰ / SO₄²⁻. Emerged ~3.5–3.2, expands significantly by ~3.0 bya
+        Console.WriteLine("Emergence of sulfur oxidation pathways");
+        mapping = new Dictionary<SimulationEntity, SimulationEntity?>();
+        commonLife = ReplaceEntity(commonLife, null, mapping, 1, new SimulationEntityConcept("Sulfur Oxidation Pathways"));
+        simulation.AddOrChangeEntities(mapping, new List<SimulationEntity>(), simulation);
 
         return simulation;
     }
@@ -127,17 +152,18 @@ public static class SimulationFactory
         SimulationEntity entity,
         string evolvedName)
     {
-        var clone = ReplaceEntity(entity, null, mapping, 1);
+        var clone = ReplaceEntity(entity, null, mapping, 1, null);
         var evolved = new SimulationEntity(entity, copyResources: false, name: evolvedName);
         evolved.SetAncestor(clone);
         return (clone, evolved);
     }
 
-    private static SimulationEntity ReplaceEntity(SimulationEntity entity, string? newName, Dictionary<SimulationEntity, SimulationEntity?> mapping, decimal valueAdd)
+    private static SimulationEntity ReplaceEntity(SimulationEntity entity, string? newName, Dictionary<SimulationEntity, SimulationEntity?> mapping, decimal valueAdd, SimulationEntityConcept? concept)
     {
         SimulationEntity clone = new SimulationEntity(entity);
         if (!string.IsNullOrEmpty(newName)) clone.Name = newName;
         if (valueAdd > 0) clone.Resources.Add(new SimulationResource(ResourceType.MetaphysicalEnergy, valueAdd, true));
+        if (concept != null) clone.Concepts.Add(concept);
         mapping[entity] = clone;
         return clone;
     }
