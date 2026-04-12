@@ -137,7 +137,7 @@ public class Simulation : IDisposable
         return ancestors;
     }
 
-    public void AddOrChangeEntities(Dictionary<SimulationEntity, SimulationEntity?> entityMapping, List<SimulationEntity> newEntities, Simulation originator)
+    public void AddOrChangeEntitiesDelta(List<SimulationEntityChange> changes, Simulation originator)
     {
         var ancestors = GetAncestors();
 
@@ -145,19 +145,19 @@ public class Simulation : IDisposable
 
         // First pass: top-down (root to immediate parent)
         for (int i = ancestors.Count - 1; i >= 0; i--)
-            ancestors[i].OnChildEntityEvent(entityMapping, newEntities, originator, i + 1, 1, ref cancelled);
+            ancestors[i].OnChildEntityEventDelta(changes, originator, i + 1, 1, ref cancelled);
 
         // Second pass: bottom-up (immediate parent to root)
         for (int i = 0; i < ancestors.Count; i++)
-            ancestors[i].OnChildEntityEvent(entityMapping, newEntities, originator, i + 1, 2, ref cancelled);
+            ancestors[i].OnChildEntityEventDelta(changes, originator, i + 1, 2, ref cancelled);
 
         if (!cancelled)
         {
-            if (!ValidateAddOrChangeEntitiesEvent(entityMapping, newEntities))
-                throw new InvalidOperationException("AddOrChangeEntities validation failed.");
+            if (!ValidateAddOrChangeEntitiesDeltaEvent(changes))
+                throw new InvalidOperationException("AddOrChangeEntitiesDelta validation failed.");
 
             // Compute and apply all resource changes upfront
-            var (resourceChanges, wasteChanges) = ComputeEntityEventSimulationResourcesDelta(entityMapping, newEntities);
+            var (resourceChanges, wasteChanges) = ComputeEntityEventSimulationResourcesDelta(changes);
 
             foreach (var (type, change) in resourceChanges)
             {
@@ -178,39 +178,52 @@ public class Simulation : IDisposable
             foreach (var (type, qty) in wasteChanges)
                 MergeResourceIntoCollection(_usedUpResources, new SimulationResource(type, qty, false));
 
-            // Update entity lists
-            foreach (var (before, after) in entityMapping)
+            // Persist entity changes
+            foreach (var change in changes)
             {
-                _entities.Remove(before);
-
-                if (after == null)
-                    continue;
-
-                bool entityDied = before.Status == SimulationEntityStatus.Alive
-                    && after.Status == SimulationEntityStatus.Deceased;
-
-                if (!entityDied)
-                    _entities.Add(after);
-
-                if (after.IndividualId != Guid.Empty)
-                    _entitiesByIndividualId[after.IndividualId] = after;
-
-                // If the entity has an ancestor that is not itself being remapped,
-                // update the ancestor's progeny list to point to the new version.
-                var ancestor = before.Ancestor;
-                if (ancestor != null && !entityMapping.ContainsKey(ancestor))
+                switch (change.ChangeType)
                 {
-                    int progenyIndex = ancestor.Progeny.IndexOf(before);
-                    if (progenyIndex >= 0)
-                        ancestor.Progeny[progenyIndex] = after;
+                    case SimulationEntityChangeType.EntityNew:
+                        _entities.Add(change.Entity);
+                        if (change.Entity.IndividualId != Guid.Empty)
+                            _entitiesByIndividualId[change.Entity.IndividualId] = change.Entity;
+                        if (change.Entity.Ancestor != null && !change.Entity.Ancestor.Progeny.Contains(change.Entity))
+                            change.Entity.Ancestor.Progeny.Add(change.Entity);
+                        break;
+                    case SimulationEntityChangeType.EntityNameChange:
+                        change.Entity.Name = change.NewName!;
+                        break;
+                    case SimulationEntityChangeType.EntitySetIndividualId:
+                        change.Entity.IndividualId = change.NewIndividualId;
+                        if (change.NewIndividualId != Guid.Empty)
+                            _entitiesByIndividualId[change.NewIndividualId] = change.Entity;
+                        break;
+                    case SimulationEntityChangeType.EntityAddOrRemoveResources:
+                        foreach (var delta in change.Resources)
+                        {
+                            var existing = change.Entity.Resources.FirstOrDefault(r => r.ResourceType == delta.ResourceType && r.IsValueAdd == delta.IsValueAdd);
+                            if (existing != null)
+                            {
+                                var newQty = existing.Quantity + delta.Quantity;
+                                if (newQty == 0)
+                                    change.Entity.Resources.Remove(existing);
+                                else
+                                    change.Entity.Resources[change.Entity.Resources.IndexOf(existing)] = existing with { Quantity = newQty };
+                            }
+                            else
+                            {
+                                change.Entity.Resources.Add(new SimulationResource(delta.ResourceType, delta.Quantity, delta.IsValueAdd));
+                            }
+                        }
+                        break;
+                    case SimulationEntityChangeType.EntityNewConcept:
+                        foreach (var concept in change.Concepts)
+                            change.Entity.Concepts.Add(concept);
+                        break;
+                    case SimulationEntityChangeType.EntityKill:
+                        _entities.Remove(change.Entity);
+                        break;
                 }
-            }
-
-            foreach (var newEntity in newEntities)
-            {
-                _entities.Add(newEntity);
-                if (newEntity.IndividualId != Guid.Empty)
-                    _entitiesByIndividualId[newEntity.IndividualId] = newEntity;
             }
         }
     }
@@ -219,47 +232,36 @@ public class Simulation : IDisposable
         entity.Resources.Concat(entity.Concepts.SelectMany(c => c.Resources));
 
     protected static (Dictionary<ResourceType, decimal> ResourceChanges, Dictionary<ResourceType, decimal> WasteChanges)
-        ComputeEntityEventSimulationResourcesDelta(
-            Dictionary<SimulationEntity, SimulationEntity?> entityMapping,
-            List<SimulationEntity> newEntities)
+        ComputeEntityEventSimulationResourcesDelta(List<SimulationEntityChange> changes)
     {
-        // Compute non-value-add delta per resource type
         var nonValueAddDelta = new Dictionary<ResourceType, decimal>();
+        var harvestByType = new Dictionary<ResourceType, decimal>();
 
-        foreach (var (before, after) in entityMapping)
+        foreach (var change in changes)
         {
-            IEnumerable<SimulationResource> beforeNonValueAdd = AllResources(before).Where(r => !r.IsValueAdd);
-            IEnumerable<SimulationResource> afterNonValueAdd = after != null ? AllResources(after).Where(r => !r.IsValueAdd) : [];
-
-            var allTypes = beforeNonValueAdd.Select(r => r.ResourceType)
-                .Concat(afterNonValueAdd.Select(r => r.ResourceType))
-                .Distinct();
-
-            foreach (var resourceType in allTypes)
+            switch (change.ChangeType)
             {
-                decimal afterQty = afterNonValueAdd.Where(r => r.ResourceType == resourceType).Sum(r => r.Quantity);
-                decimal beforeQty = beforeNonValueAdd.Where(r => r.ResourceType == resourceType).Sum(r => r.Quantity);
-                nonValueAddDelta[resourceType] = nonValueAddDelta.GetValueOrDefault(resourceType) + afterQty - beforeQty;
+                case SimulationEntityChangeType.EntityNew:
+                {
+                    foreach (var resource in AllResources(change.Entity).Where(r => !r.IsValueAdd))
+                        nonValueAddDelta[resource.ResourceType] = nonValueAddDelta.GetValueOrDefault(resource.ResourceType) + resource.Quantity;
+                    break;
+                }
+                case SimulationEntityChangeType.EntityAddOrRemoveResources:
+                {
+                    foreach (var resource in change.Resources.Where(r => !r.IsValueAdd))
+                        nonValueAddDelta[resource.ResourceType] = nonValueAddDelta.GetValueOrDefault(resource.ResourceType) + resource.Quantity;
+                    break;
+                }
+                case SimulationEntityChangeType.EntityKill:
+                {
+                    foreach (var resource in AllResources(change.Entity).Where(r => r.IsValueAdd))
+                        harvestByType[resource.ResourceType] = harvestByType.GetValueOrDefault(resource.ResourceType) + resource.Quantity;
+                    break;
+                }
             }
         }
 
-        foreach (var newEntity in newEntities)
-        {
-            foreach (var resourceType in AllResources(newEntity).Where(r => !r.IsValueAdd).Select(r => r.ResourceType).Distinct())
-            {
-                decimal qty = AllResources(newEntity).Where(r => !r.IsValueAdd && r.ResourceType == resourceType).Sum(r => r.Quantity);
-                nonValueAddDelta[resourceType] = nonValueAddDelta.GetValueOrDefault(resourceType) + qty;
-            }
-        }
-
-        // Compute harvest per resource type from deceased entities
-        var harvestByType = entityMapping
-            .Where(kv => kv.Key.Status == SimulationEntityStatus.Alive && kv.Value?.Status == SimulationEntityStatus.Deceased)
-            .SelectMany(kv => AllResources(kv.Value!).Where(r => r.IsValueAdd))
-            .GroupBy(r => r.ResourceType)
-            .ToDictionary(g => g.Key, g => g.Sum(r => r.Quantity));
-
-        // Net non-value-add delta against harvest to produce final resource and waste changes
         var resourceChanges = new Dictionary<ResourceType, decimal>();
         var wasteChanges = new Dictionary<ResourceType, decimal>();
 
@@ -270,14 +272,12 @@ public class Simulation : IDisposable
 
             if (delta >= 0)
             {
-                // Entities need more (or same): harvest offsets; remainder is surplus or deficit
                 decimal netNeed = delta - harvest;
                 if (netNeed != 0)
-                    resourceChanges[type] = -netNeed; // positive = simulation gains; negative = simulation provides
+                    resourceChanges[type] = -netNeed;
             }
             else
             {
-                // Entities released resources: offset against harvest before wasting the remainder
                 decimal released = -delta;
                 decimal absorbed = Math.Min(released, harvest);
                 decimal harvestSurplus = harvest - absorbed;
@@ -292,16 +292,16 @@ public class Simulation : IDisposable
         return (resourceChanges, wasteChanges);
     }
 
-    protected virtual void OnChildEntityEvent(Dictionary<SimulationEntity, SimulationEntity?> entityMapping, List<SimulationEntity> newEntities, Simulation originator, int levelsUp, int passNumber, ref bool cancelled)
+    protected virtual void OnChildEntityEventDelta(List<SimulationEntityChange> changes, Simulation originator, int levelsUp, int passNumber, ref bool cancelled)
     {
-        if (!ValidateAddOrChangeEntitiesEvent(entityMapping, newEntities))
+        if (!ValidateAddOrChangeEntitiesDeltaEvent(changes))
             cancelled = true;
     }
 
-    protected bool ValidateAddOrChangeEntitiesEvent(Dictionary<SimulationEntity, SimulationEntity?> entityMapping, List<SimulationEntity> newEntities)
+    protected bool ValidateAddOrChangeEntitiesDeltaEvent(List<SimulationEntityChange> changes)
     {
         // Check that resource changes do not overdraw any simulation resource
-        var (resourceChanges, _) = ComputeEntityEventSimulationResourcesDelta(entityMapping, newEntities);
+        var (resourceChanges, _) = ComputeEntityEventSimulationResourcesDelta(changes);
         foreach (var (resourceType, change) in resourceChanges)
         {
             if (change < 0)
@@ -312,45 +312,47 @@ public class Simulation : IDisposable
             }
         }
 
-        // Check for resurrection, duplicate entity references, and before-entity individual ID consistency
-        var allEntities = new HashSet<SimulationEntity>();
-        foreach (var (before, after) in entityMapping)
+        // Check entity list membership: EntityNew entities must not already exist; all others must
+        foreach (var change in changes)
         {
-            if (after != null
-                && before.Status == SimulationEntityStatus.Deceased
-                && after.Status == SimulationEntityStatus.Alive)
-                return false;
-            if (!allEntities.Add(before)) return false;
-            if (after != null && !allEntities.Add(after)) return false;
-            if (before.IndividualId != Guid.Empty
-                && (!_entitiesByIndividualId.TryGetValue(before.IndividualId, out var mapped) || !ReferenceEquals(mapped, before)))
-                return false;
+            if (change.ChangeType == SimulationEntityChangeType.EntityNew)
+            {
+                if (_entities.Contains(change.Entity))
+                    return false;
+            }
+            else
+            {
+                if (!_entities.Contains(change.Entity))
+                    return false;
+            }
         }
-        foreach (var newEntity in newEntities)
-            if (!allEntities.Add(newEntity)) return false;
 
-        // Check resultant entities for duplicate individual IDs and verify any existing
-        // simulation individual IDs have their owner present as a mapping input
-        var resultantIds = new HashSet<Guid>();
-        foreach (var after in entityMapping.Values)
+        // Check that ancestors of new entities are already in the simulation or being simultaneously created
+        var newEntitiesInEvent = changes
+            .Where(c => c.ChangeType == SimulationEntityChangeType.EntityNew)
+            .Select(c => c.Entity)
+            .ToHashSet();
+        foreach (var change in changes.Where(c => c.ChangeType == SimulationEntityChangeType.EntityNew))
         {
-            if (after != null && after.IndividualId != Guid.Empty)
-            {
-                if (!resultantIds.Add(after.IndividualId)) return false;
-                if (_entitiesByIndividualId.TryGetValue(after.IndividualId, out var existing)
-                    && !entityMapping.ContainsKey(existing))
-                    return false;
-            }
+            var ancestor = change.Entity.Ancestor;
+            if (ancestor != null && !_entities.Contains(ancestor) && !newEntitiesInEvent.Contains(ancestor))
+                return false;
         }
-        foreach (var newEntity in newEntities)
+
+        // Check for duplicate change types on the same entity
+        var seen = new HashSet<(SimulationEntity, SimulationEntityChangeType)>();
+        foreach (var change in changes)
+            if (!seen.Add((change.Entity, change.ChangeType)))
+                return false;
+
+        // Check for duplicate individual IDs across EntitySetIndividualId changes and against existing registrations
+        var assignedIds = new HashSet<Guid>();
+        foreach (var change in changes.Where(c => c.ChangeType == SimulationEntityChangeType.EntitySetIndividualId))
         {
-            if (newEntity.IndividualId != Guid.Empty)
-            {
-                if (!resultantIds.Add(newEntity.IndividualId)) return false;
-                if (_entitiesByIndividualId.TryGetValue(newEntity.IndividualId, out var existing)
-                    && !entityMapping.ContainsKey(existing))
-                    return false;
-            }
+            if (!assignedIds.Add(change.NewIndividualId))
+                return false;
+            if (_entitiesByIndividualId.TryGetValue(change.NewIndividualId, out var existing) && !ReferenceEquals(existing, change.Entity))
+                return false;
         }
 
         return true;
