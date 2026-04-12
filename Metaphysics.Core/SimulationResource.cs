@@ -11,3 +11,5 @@ public record SimulationResource(ResourceType ResourceType, decimal Quantity, bo
         ? Quantity
         : throw new ArgumentOutOfRangeException(nameof(Quantity), "Quantity must be greater than zero.");
 }
+
+public record SimulationResourceDelta(ResourceType ResourceType, decimal Quantity, bool IsValueAdd);
