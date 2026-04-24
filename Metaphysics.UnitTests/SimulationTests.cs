@@ -174,16 +174,26 @@ public class SimulationTests
         entity.Resources.Add(new SimulationResource(ResourceType.MetaphysicalEnergy, 1m, false));
         simulation.AddOrChangeEntitiesDelta([new SimulationEntityChange { Entity = entity, ChangeType = SimulationEntityChangeType.EntityNew }], simulation);
         Assert.AreEqual(4m, simulation.AvailableResources.Sum(r => r.Quantity));
+        var totalAfterAdd = simulation.GetTotalEntityResources();
+        Assert.HasCount(1, totalAfterAdd);
+        Assert.AreEqual(ResourceType.MetaphysicalEnergy, totalAfterAdd[0].ResourceType);
+        Assert.AreEqual(1m, totalAfterAdd[0].Quantity);
+        Assert.IsFalse(totalAfterAdd[0].IsValueAdd);
 
         // Add 1 value-add energy alongside existing non-value-add → simulation energy unchanged
         var resourceChange = new SimulationEntityChange { Entity = entity, ChangeType = SimulationEntityChangeType.EntityAddOrRemoveResources };
         resourceChange.Resources.Add(new SimulationResourceDelta(ResourceType.MetaphysicalEnergy, 1m, true));
         simulation.AddOrChangeEntitiesDelta([resourceChange], simulation);
         Assert.AreEqual(4m, simulation.AvailableResources.Sum(r => r.Quantity));
+        var totalAfterResourceChange = simulation.GetTotalEntityResources();
+        Assert.HasCount(2, totalAfterResourceChange);
+        Assert.AreEqual(1m, totalAfterResourceChange.Single(r => !r.IsValueAdd).Quantity);
+        Assert.AreEqual(1m, totalAfterResourceChange.Single(r => r.IsValueAdd).Quantity);
 
         // Kill entity → value-add resource harvested, simulation goes from 4 to 5
         simulation.AddOrChangeEntitiesDelta([new SimulationEntityChange { Entity = entity, ChangeType = SimulationEntityChangeType.EntityKill }], simulation);
         Assert.AreEqual(5m, simulation.AvailableResources.Sum(r => r.Quantity));
+        Assert.IsEmpty(simulation.GetTotalEntityResources());
     }
 
     [TestMethod]

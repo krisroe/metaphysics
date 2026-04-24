@@ -250,6 +250,13 @@ public class Simulation : IDisposable
     private static IEnumerable<SimulationResource> AllResources(SimulationEntity entity) =>
         entity.Resources.Concat(entity.Concepts.SelectMany(c => c.Resources));
 
+    public IReadOnlyList<SimulationResource> GetTotalEntityResources() =>
+        _entities
+            .SelectMany(AllResources)
+            .GroupBy(r => (r.ResourceType, r.IsValueAdd))
+            .Select(g => new SimulationResource(g.Key.ResourceType, g.Sum(r => r.Quantity), g.Key.IsValueAdd))
+            .ToList();
+
     protected static (Dictionary<ResourceType, decimal> ResourceChanges, Dictionary<ResourceType, decimal> WasteChanges)
         ComputeEntityEventSimulationResourcesDelta(List<SimulationEntityChange> changes)
     {
