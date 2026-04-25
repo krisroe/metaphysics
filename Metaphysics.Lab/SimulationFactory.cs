@@ -47,6 +47,9 @@ public static class SimulationFactory
     /// <param name="observerEntity">observer entity</param>
     private static void ProcessBeginningOfLifeOnEarthToGreatOxidationEvent(Simulation simulation, SimulationEntity observerEntity)
     {
+        IReadOnlyList<SimulationResource> baseSimulationAvailableResources = new List<SimulationResource>(simulation.AvailableResources);
+        IReadOnlyList<SimulationResource> baseSimulationEntityResources = simulation.GetTotalEntityResources();
+
         //Environment necessary for the development of life
         //1. Chemical building blocks (CO₂, CO, CH₄, NH₃, N₂, H₂O, Phosphorus, sulfur, metals)
         //2. Persistent energy sources (Geochemical energy (H₂, redox gradients), UV radiation, Lightning / electrical discharge, Thermal gradients)
@@ -75,8 +78,9 @@ public static class SimulationFactory
                 lifeAgentObserverResourceChange
             ],
             simulation);
+        ValidateSimulationResources(simulation, baseSimulationEntityResources, baseSimulationAvailableResources, 0, 0, 0, 1);
 
-        PreLifeEvolution(simulation, prebioticEnvironment);
+        PreLifePathway(simulation, prebioticEnvironment);
 
         //Timeline for abiogeneis is 3.8 to 3.5 billion years ago, but possibly back to 4.1 billion years ago.
         //1. This is a simplification since there might be earlier groups of organisms that become extinct.
@@ -93,6 +97,7 @@ public static class SimulationFactory
                 abiogenesisLifeAgentResourceChange
             ],
             simulation);
+        ValidateSimulationResources(simulation, baseSimulationEntityResources, baseSimulationAvailableResources, 0, 0, 0, 2);
 
         AddCommonLifeFeaturesPriorToArchaeaBacteriaDivergence(simulation, commonLife);
 
@@ -112,10 +117,12 @@ public static class SimulationFactory
                 divergenceResourceChange
             ],
             simulation);
+        ValidateSimulationResources(simulation, baseSimulationEntityResources, baseSimulationAvailableResources, 0, 0, 0, 3);
 
         //In principle, methanogenesis developed prior to the bacteria/archaea split, but ended up exclusive to archaea
         Console.WriteLine("Methanogenesis is exclusive to archaea");
         AddConcept(simulation, archaea, ["Methanogenesis"], 1);
+        ValidateSimulationResources(simulation, baseSimulationEntityResources, baseSimulationAvailableResources, 0, 0, 0, 4);
 
         //End of abiogenesis era (~3.5 bya)
         Console.WriteLine("End of abiogenesis era (~3.5 bya)");
@@ -127,6 +134,7 @@ public static class SimulationFactory
             ],
             simulation);
         commonLife = luca;
+        ValidateSimulationResources(simulation, baseSimulationEntityResources, baseSimulationAvailableResources, 0, 1, 0, 3);
 
         //~3.5 bya
         //Single, simple reaction center
@@ -140,6 +148,7 @@ public static class SimulationFactory
         //Type II reaction center: Strong reducing power, can reduce ferredoxin or NAD(P)+ (directly or easily)
         Console.WriteLine("Anoxygenic Photosynthesis Type I and II Reaction Centers");
         AddConcept(simulation, bacteria, ["Anoxygenic photosynthesis Type II Reaction Center", "Anoxygenic photosynthesis Type I Reaction Center"], 1);
+        ValidateSimulationResources(simulation, baseSimulationEntityResources, baseSimulationAvailableResources, 0, 1, 0, 4);
 
         //common in bacteria (e.g. proteobacteria, chlorobi), present in some groups of archaea (e.g. thermophiles)
         //H₂S → S⁰ / SO₄²⁻. Emerged ~3.5–3.2, expands significantly by ~3.0 bya
@@ -229,6 +238,7 @@ public static class SimulationFactory
         //Coupled outputs: ATP (via proton gradient, NADPH, O2)
         Console.WriteLine("Oxygenic Photosynthesis Z-Scheme");
         AddConcept(simulation, cyanobacteria, ["Oxygenic Photosynthesis Z-Scheme"], 1);
+        ValidateSimulationResources(simulation, baseSimulationEntityResources, baseSimulationAvailableResources, 0, 1, 0, 5);
 
         //Oxygen sink: iron-rich oceans (Fe[2+] + Ox --> Fe[3+] (rust) -> sinks as rock (banded iron formations)
         //Oxygen sink: volcanic gases (H2, CH4, H2S react with oxygen)
@@ -248,9 +258,11 @@ public static class SimulationFactory
         greatOxidationEventCasualties.Resources.Add(new SimulationResource(ResourceType.MetaphysicalEnergy, 2m, true));
         changes.Add(new SimulationEntityChange { Entity = greatOxidationEventCasualties, ChangeType = SimulationEntityChangeType.EntityNew });
         simulation.AddOrChangeEntitiesDelta(changes, simulation);
+        ValidateSimulationResources(simulation, baseSimulationEntityResources, baseSimulationAvailableResources, 0, 1, 0, 5); //no change
 
         //harvest resources from the great oxidation event casualties
         simulation.AddOrChangeEntitiesDelta([new SimulationEntityChange { Entity = greatOxidationEventCasualties, ChangeType = SimulationEntityChangeType.EntityKill }], simulation);
+        ValidateSimulationResources(simulation, baseSimulationEntityResources, baseSimulationAvailableResources, 0, 3, 0, 3);
     }
 
     /// <summary>
@@ -303,7 +315,7 @@ public static class SimulationFactory
     /// </summary>
     /// <param name="simulation">simulation</param>
     /// <param name="prebioticEnvironment">entity representing the prebiotic environent</param>
-    private static void PreLifeEvolution(Simulation simulation, SimulationEntity prebioticEnvironment)
+    private static void PreLifePathway(Simulation simulation, SimulationEntity prebioticEnvironment)
     {
         //~4.0–3.8 bya
         //Energy gradients + mineral catalysis (pre-cellular)
@@ -340,5 +352,48 @@ public static class SimulationFactory
             resourceChange.Resources.Add(new SimulationResourceDelta(ResourceType.MetaphysicalEnergy, valueAddEnergyGain, true));
         }
         simulation.AddOrChangeEntitiesDelta([conceptChange, resourceChange], simulation);
+    }
+
+    private static void ValidateSimulationResources(Simulation simulation, IReadOnlyList<SimulationResource> baseEntityResources, IReadOnlyList<SimulationResource> baseAvailableSimulationResources, decimal simulationNonValueAdd, decimal simulationValueAdd, decimal entityNonValueAdd, decimal entityValueAdd)
+    {
+        List<SimulationResource> expectedEntityResources = new List<SimulationResource>();
+        if (entityNonValueAdd > 0)
+        {
+            expectedEntityResources.Add(new SimulationResource(ResourceType.MetaphysicalEnergy, entityNonValueAdd, false));
+        }
+        if (entityValueAdd > 0)
+        {
+            expectedEntityResources.Add(new SimulationResource(ResourceType.MetaphysicalEnergy, entityValueAdd, true));
+        }
+
+        List<SimulationResource> expectedAvailableResources = new List<SimulationResource>();
+        if (simulationNonValueAdd > 0)
+        {
+            expectedAvailableResources.Add(new SimulationResource(ResourceType.MetaphysicalEnergy, simulationNonValueAdd, false));
+        }
+        if (simulationValueAdd > 0)
+        {
+            expectedAvailableResources.Add(new SimulationResource(ResourceType.MetaphysicalEnergy, simulationValueAdd, true));
+        }
+
+        ValidateSimulationResources(simulation, baseEntityResources, baseAvailableSimulationResources, expectedEntityResources, expectedAvailableResources);
+    }
+
+    private static void ValidateSimulationResources(Simulation simulation, IReadOnlyList<SimulationResource> baseEntityResources, IReadOnlyList<SimulationResource> baseAvailableSimulationResources, IReadOnlyList<SimulationResource> expectedEntityResources, IReadOnlyList<SimulationResource> expectedAvailableSimulationResources)
+    {
+        List<SimulationResource> expectedTotalResources = new List<SimulationResource>();
+        expectedTotalResources.AddRange(baseAvailableSimulationResources);
+        expectedTotalResources.AddRange(expectedAvailableSimulationResources);
+        if (!SimulationResource.TotalsAreEqual(expectedTotalResources, simulation.AvailableResources))
+        {
+            throw new InvalidOperationException("Simulation available resources mismatch");
+        }
+        expectedTotalResources = new List<SimulationResource>();
+        expectedTotalResources.AddRange(baseEntityResources);
+        expectedTotalResources.AddRange(expectedEntityResources);
+        if (!SimulationResource.TotalsAreEqual(expectedTotalResources, simulation.GetTotalEntityResources()))
+        {
+            throw new InvalidOperationException("Simulation entity resources mismatch");
+        }
     }
 }
