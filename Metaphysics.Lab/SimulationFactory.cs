@@ -26,9 +26,78 @@ public static class SimulationFactory
 
         Console.WriteLine("Lots of physics stuff happens in the simulation.");
 
+        ProcessSolarSystemCreation(simulation);
+
         ProcessBeginningOfLifeOnEarthToGreatOxidationEvent(simulation, observerEntity);
 
         return simulation;
+    }
+
+    /// <summary>
+    /// processes the formation of the solar system
+    /// </summary>
+    /// <param name="simulation">simulation</param>
+    private static void ProcessSolarSystemCreation(Simulation simulation)
+    {
+        //~70-75% hydrogen gas (molecular hydrogen)
+        //~25% helium
+        //~1-2% dust and heavier elements
+        //Temperature: ~10-20 K
+        //Size: Tens to hundreds of light-years across
+        //Mass: up to 100,000-1,000,000 solar masses
+        SimulationEntity giantMolecularCloud = new SimulationEntity("Giant molecular cloud (GMC)");
+        simulation.AddOrChangeEntitiesDelta([new SimulationEntityChange { Entity = giantMolecularCloud, ChangeType = SimulationEntityChangeType.EntityNew }], simulation);
+
+        //Dense core size: ~0.05-0.1 light years
+        //Mass: ~1-2 solar masses
+        //Density ~10^4-10^6 particles/cm3 (much denser than the average interstellar medium)
+        Console.WriteLine("Dense core forms within the giant molecular cloud");
+        simulation.AddOrChangeEntitiesDelta([new SimulationEntityChange { Entity = giantMolecularCloud, ChangeType = SimulationEntityChangeType.EntityNameChange,NewName = "Giant molecular cloud with dense core" }], simulation);
+
+        //triggered by a nearby supernova or strong stellar winds (shock or pressure wave)
+        Console.WriteLine("Collapse of molecular cloud (~4.567 bya)");
+        simulation.AddOrChangeEntitiesDelta([new SimulationEntityChange { Entity = giantMolecularCloud, ChangeType = SimulationEntityChangeType.EntityNameChange, NewName = "Collapsing giant molecular cloud with dense core" }], simulation);
+        SimulationEntity star = giantMolecularCloud;
+
+        //10,000 to 100,000 years after collapse, gravity-dominated interactions creating solar nebula
+        SimulationEntity solarNebulaDisk = new SimulationEntity("Solar nebula disk");
+        simulation.AddOrChangeEntitiesDelta(
+            [new SimulationEntityChange { Entity = star, ChangeType = SimulationEntityChangeType.EntityNameChange, NewName = "Protostar (Class 0)" },
+            new SimulationEntityChange { Entity = solarNebulaDisk, ChangeType = SimulationEntityChangeType.EntityNew }], simulation);
+
+        //~100,000 to ~500,000 years after collapse
+        simulation.AddOrChangeEntitiesDelta(
+            [new SimulationEntityChange { Entity = star, ChangeType = SimulationEntityChangeType.EntityNameChange, NewName = "Protostar (Class 1) " }], simulation);
+
+        //Jupter core formation begins (~0.5-1 Myr)
+        SimulationEntity jupiter = new SimulationEntity("proto-Jupiter");
+        simulation.AddOrChangeEntitiesDelta([new SimulationEntityChange { Entity = jupiter, ChangeType = SimulationEntityChangeType.EntityNew }], simulation);
+
+        //Saturn core formation begins (~1-2 Myr)
+        SimulationEntity saturn = new SimulationEntity("proto-Saturn");
+        simulation.AddOrChangeEntitiesDelta([new SimulationEntityChange { Entity = saturn, ChangeType = SimulationEntityChangeType.EntityNew }], simulation);
+
+        //It is assured Jupiter will become a planet, as it has reached ~3-5 Earth masses (~1-2 Myr)
+        simulation.AddOrChangeEntitiesDelta([new SimulationEntityChange { Entity = jupiter, ChangeType = SimulationEntityChangeType.EntityNameChange, NewName = "proto-Jupiter (future planet)" }], simulation);
+
+        //Mars core formation begins (~1-3 Myr)
+        SimulationEntity mars = new SimulationEntity("proto-Mars");
+        simulation.AddOrChangeEntitiesDelta([new SimulationEntityChange { Entity = mars, ChangeType = SimulationEntityChangeType.EntityNew }], simulation);
+
+        //Jupiter reaches ~10 Earth masses, ensuring it will eventually become a gas giant planet (~1-3 Myr)
+        simulation.AddOrChangeEntitiesDelta([new SimulationEntityChange { Entity = jupiter, ChangeType = SimulationEntityChangeType.EntityNameChange, NewName = "proto-Jupiter (future gas giant planet)" }], simulation);
+
+        //Jupiter undergoes runaway gas accretion over 10,000-100,000 years (~1-3 Myr)
+        simulation.AddOrChangeEntitiesDelta([new SimulationEntityChange { Entity = jupiter, ChangeType = SimulationEntityChangeType.EntityNameChange, NewName = "proto-Jupiter (future gas giant planet)" }], simulation);
+
+        //Mercury core formation begins (~1-5 Myr)
+        SimulationEntity mercury = new SimulationEntity("proto-Mercury");
+        simulation.AddOrChangeEntitiesDelta([new SimulationEntityChange { Entity = mercury, ChangeType = SimulationEntityChangeType.EntityNew }], simulation);
+
+        SimulationEntity neptune = new SimulationEntity("proto-Neptune");
+        SimulationEntity uranus = new SimulationEntity("proto-Uranus");
+        SimulationEntity oceanus = new SimulationEntity("proto-Oceanus");
+        SimulationEntity[] iceGiants = [neptune, uranus, oceanus];
     }
 
     /// <summary>
