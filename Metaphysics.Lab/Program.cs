@@ -21,7 +21,7 @@ if (storyType == SimulationStoryType.HelloWorld)
 }
 else if (storyType == SimulationStoryType.BaseSimulationMaturation)
 {
-    using (var simulation = SimulationFactory.RunBaseSimulationMaturation())
+    using (var simulation = SimulationFactory.RunBaseSimulationMaturation(SimulationFactory.SolarSystemIceGiantStartingScenario.UranusNeptune))
     {
     }
 }
